@@ -1,0 +1,17 @@
+{
+  "name": "digital-romanian-cms",
+  "private": true,
+  "version": "0.0.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@11.21.0",
+  "scripts": {
+    "dev": "pnpm --filter @digital-romanian/web dev",
+    "dev:web": "pnpm --filter @digital-romanian/web dev",
+    "dev:medusa": "pnpm --filter @digital-romanian/medusa dev",
+    "build:web": "pnpm --filter @digital-romanian/web build",
+    "typecheck": "pnpm -r --if-present run typecheck",
+    "lint": "pnpm -r --if-present run lint"
+  }
+}

@@ -1,0 +1,14 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# pnpm 10+ blocks dependency lifecycle/build scripts by default (supply
+# chain hardening). Medusa needs these to build native bindings (esbuild,
+# swc, msgpackr, protobufjs) and to run its own telemetry postinstall.
+# All five are maintained by Medusa or well-known infra projects.
+allowBuilds:
+  "@medusajs/telemetry": true
+  "@swc/core": true
+  esbuild: true
+  msgpackr-extract: true
+  protobufjs: true
