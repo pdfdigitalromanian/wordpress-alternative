@@ -57,19 +57,39 @@ data exists in the *local* database only.
 Part A §2 (admin shell only, not full admin areas), §3 (workspaces/sites,
 roles, RLS), §14 milestone 1.
 
-- Supabase Auth wiring in `apps/web` (session handling, server-only secret
-  key usage per Part A §11).
-- Schema + migrations: `workspaces`, `memberships`, `sites`, roles (owner/
-  admin/editor/viewer), pushed via `supabase db push` to the hosted
-  project (see `docs/setup.md`).
-- RLS policies from the first migration, not bolted on later. Cross-
-  workspace isolation tests (Part A §3).
-- Minimal admin shell (sidebar, site switcher, breadcrumbs — Overview area
-  only; the other 13 admin areas in Part A §2's table come with the
-  milestones that give them real data, not before).
-- One real public SSR route resolved through a verified site/domain
-  mapping (Part A §13's "reject unknown hosts" requirement), replacing the
-  placeholder `/` route from M0.
+- [x] Schema + migrations: `workspaces`, `workspace_memberships` (roles:
+      owner/administrator/editor/viewer), `sites`, `site_domains`, pushed
+      to the hosted project via `supabase db push`
+      (`supabase/migrations/20260920045632_initial_workspaces_sites.sql`).
+- [x] RLS policies written in the same migration as the tables, not
+      bolted on later.
+- [x] Cross-workspace isolation verified with a real integration test
+      against the hosted project (`supabase/tests/workspace-isolation.mjs`,
+      run via `pnpm test:rls`) — two throwaway users, 9 checks, all
+      passing: creation, auto-owner-membership, and denied cross-
+      workspace read/insert/update.
+- [ ] Supabase Auth wiring in `apps/web` (session handling, server-only
+      secret key usage per Part A §11).
+- [ ] Minimal admin shell (sidebar, site switcher, breadcrumbs — Overview
+      area only; the other 13 admin areas in Part A §2's table come with
+      the milestones that give them real data, not before).
+- [ ] One real public SSR route resolved through a verified site/domain
+      mapping (Part A §13's "reject unknown hosts" requirement; the
+      `site_domains` table + `public_site_by_hostname` view already exist
+      for this), replacing the placeholder `/` route from M0.
+
+Note: reaching the schema milestone surfaced a real Postgres RLS
+gotcha — worth knowing before writing similar trigger-driven ownership
+patterns elsewhere (collections, forms, etc.): AFTER ROW triggers fire at
+the end of the statement, which is *after* an `INSERT ... RETURNING`
+projection is computed. A `workspaces_select` policy that depended solely
+on the owner-membership row created by an `AFTER INSERT` trigger failed
+on the creator's own `INSERT ... RETURNING` — Postgres treats "can't see
+the row you just inserted" as the same RLS violation as a failed
+`WITH CHECK`. Fixed by also allowing `created_by = auth.uid()` directly
+in the select policy (see
+`supabase/migrations/20260920050413_fix_workspaces_select_visibility.sql`
+for the full explanation) rather than depending on trigger timing.
 
 ## M2 — Blank theme, visual editor, publishing, rollback
 
