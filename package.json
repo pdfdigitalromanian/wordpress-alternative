@@ -12,6 +12,10 @@
     "dev:medusa": "pnpm --filter @digital-romanian/medusa dev",
     "build:web": "pnpm --filter @digital-romanian/web build",
     "typecheck": "pnpm -r --if-present run typecheck",
-    "lint": "pnpm -r --if-present run lint"
+    "lint": "pnpm -r --if-present run lint",
+    "test:rls": "node --env-file=apps/web/.env.local supabase/tests/workspace-isolation.mjs"
+  },
+  "devDependencies": {
+    "@supabase/supabase-js": "^2.116.0"
   }
 }

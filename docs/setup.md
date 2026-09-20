@@ -64,19 +64,33 @@ supabase login          # interactive browser OAuth — only you can do this
 supabase link --project-ref nsfcmwlbippjjlpvjoyd
 ```
 
-Once linked, migrations in `supabase/migrations/` are pushed with:
+Done as of 2026-09-20: linked, and the M1 schema (`workspaces`,
+`workspace_memberships`, `sites`, `site_domains`, RLS policies) is pushed
+and live on the hosted project. Migrations in `supabase/migrations/` are
+pushed with:
 
 ```bash
 supabase db push
 ```
 
-**Nothing has been pushed to the hosted project yet** — `supabase/migrations/`
-is currently empty (M0 is infrastructure only; the workspace/site/RLS
-schema is M1). Because there's no local CMS database to test against
-first, every migration going forward gets written carefully and reviewed
-before `db push`, and destructive operations (`supabase db reset` against
-the linked project, dropping columns/tables) are called out explicitly
-before running.
+Because there's no local CMS database to test against first, every
+migration gets written carefully and reviewed before `db push`, and
+destructive operations (`supabase db reset` against the linked project,
+dropping columns/tables) are called out explicitly before running.
+
+Cross-workspace RLS isolation is covered by a real integration test run
+against the hosted project (creates two throwaway users, exercises the
+policies, deletes everything it made):
+
+```bash
+pnpm test:rls
+```
+
+`apps/web/.env.local` (gitignored) holds the hosted project's URL,
+publishable key, and a secret key (currently the legacy `service_role`
+JWT — see the comment in that file about rotating to the new
+`sb_secret_...` format) — this is what `pnpm test:rls` reads via
+`--env-file`.
 
 ## Medusa environment variables
 
