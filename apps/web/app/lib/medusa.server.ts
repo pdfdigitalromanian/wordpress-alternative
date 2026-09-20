@@ -310,6 +310,7 @@ const StoreVariantSchema = z.object({
   manage_inventory: z.boolean().optional(),
   allow_backorder: z.boolean().optional(),
   calculated_price: CalculatedPriceSchema.optional(),
+  options: z.array(z.object({ option_id: z.string().optional(), value: z.string() })).optional().default([]),
 });
 export type StoreVariant = z.infer<typeof StoreVariantSchema>;
 
@@ -331,7 +332,8 @@ export type StoreProduct = z.infer<typeof StoreProductSchema>;
 const PRODUCT_FIELDS =
   "id,title,subtitle,description,handle,thumbnail,images.id,images.url,options.id,options.title,options.values.id,options.values.value," +
   "variants.id,variants.title,variants.sku,variants.inventory_quantity,variants.manage_inventory,variants.allow_backorder," +
-  "variants.calculated_price.calculated_amount,variants.calculated_price.currency_code";
+  "variants.calculated_price.calculated_amount,variants.calculated_price.currency_code," +
+  "variants.options.option_id,variants.options.value";
 
 export async function listStoreProducts(
   backendUrl: string,

@@ -14,6 +14,8 @@ build/
 .env.*.local
 !.env.example
 .owner-credentials.local
+.medusa-admin-credentials.local
+.medusa-secret-key.local
 
 # Supabase local
 supabase/.branches/

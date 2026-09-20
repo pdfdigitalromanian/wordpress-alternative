@@ -17,5 +17,14 @@ export default [
     route("sites/:siteId/store", "routes/admin/store.tsx"),
     route("sites/:siteId/store/products", "routes/admin/store-products.tsx"),
   ]),
+  route("api/storefront-products", "routes/api.storefront-products.tsx"),
+  // Reserved commerce routes, resolved through the same verified
+  // site/domain mapping as everything public. Registered before the
+  // catch-all so a page a CMS author creates at slug "shop" or
+  // "products" would collide here — deliberately: these paths are
+  // reserved namespace once commerce is enabled for a site (Part B SS22).
+  route("shop", "routes/shop.tsx"),
+  route("products/:handle", "routes/product-detail.tsx"),
+  route("cart", "routes/cart.tsx"),
   route("*", "routes/site-page.tsx"),
 ] satisfies RouteConfig;

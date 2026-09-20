@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useFetcher, useLoaderData } from "react-router";
 import { Puck, type Data } from "@puckeditor/core";
 import "@puckeditor/core/puck.css";
-import { componentConfig } from "~/lib/component-registry/config";
+import { componentConfig, type StorefrontMetadata } from "~/lib/component-registry/config";
 import { validatePuckDocument } from "~/lib/component-registry/validate.server";
 import { createSupabaseServerClient } from "~/lib/supabase.server";
 import type { Route } from "./+types/page-editor";
@@ -27,7 +27,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     throw new Response("Page not found in this site", { status: 404 });
   }
 
-  return { page };
+  // Passed to <Puck metadata={...}> so components like ProductGrid can
+  // fetch real data for the live editor preview via the same isomorphic
+  // route (api.storefront-products.tsx) the published renderer uses —
+  // see component-registry/config.tsx's resolveData.
+  const storefrontMetadata: StorefrontMetadata = { siteId: page.site_id, origin: new URL(request.url).origin };
+
+  return { page, storefrontMetadata };
 }
 
 type ActionBody =
@@ -102,7 +108,7 @@ export async function action({ request, params }: Route.ActionArgs) {
 const AUTOSAVE_DEBOUNCE_MS = 800;
 
 export default function PageEditor() {
-  const { page } = useLoaderData<typeof loader>();
+  const { page, storefrontMetadata } = useLoaderData<typeof loader>();
   const fetcher = useFetcher();
   const [mounted, setMounted] = useState(false);
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "conflict" | "error" | "publishing" | "published">(
@@ -243,6 +249,7 @@ export default function PageEditor() {
           <Puck
             config={componentConfig}
             data={page.draft_document as Data}
+            metadata={storefrontMetadata}
             onChange={handleChange}
             // Puck's own header renders a "Publish" button regardless of
             // whether this prop is supplied (verified: the click handler

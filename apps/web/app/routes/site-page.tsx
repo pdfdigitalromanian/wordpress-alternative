@@ -5,8 +5,9 @@
 // import in page-editor.tsx. Verified via the built output that this
 // keeps the two apart (Part A SS5: "Keep editor-specific code and
 // controls out of public website bundles").
-import { Render } from "@puckeditor/core/rsc";
-import { componentConfig } from "~/lib/component-registry/config";
+import { Render, resolveAllData } from "@puckeditor/core/rsc";
+import type { Data } from "@puckeditor/core";
+import { componentConfig, type ComponentProps, type StorefrontMetadata } from "~/lib/component-registry/config";
 import { createSupabaseAdminClient } from "~/lib/supabase.server";
 import type { Route } from "./+types/site-page";
 
@@ -51,7 +52,17 @@ export async function loader({ request }: Route.LoaderArgs) {
   if (pageError) throw new Response("Internal Server Error", { status: 500 });
   if (!releasePage) throw new Response("Not Found", { status: 404 });
 
-  return { title: releasePage.title, document: releasePage.document };
+  // Resolves any dynamic component data (e.g. ProductGrid's real product
+  // list) server-side, before the response is ever sent — so it's in the
+  // INITIAL HTML, not fetched client-side after hydration.
+  const metadata: StorefrontMetadata = { siteId: mapping.site_id, origin: url.origin };
+  const resolvedDocument = await resolveAllData<ComponentProps>(
+    releasePage.document as Partial<Data<ComponentProps>>,
+    componentConfig,
+    metadata,
+  );
+
+  return { title: releasePage.title, document: resolvedDocument };
 }
 
 export function meta({ loaderData }: Route.MetaArgs) {
@@ -60,6 +71,5 @@ export function meta({ loaderData }: Route.MetaArgs) {
 }
 
 export default function SitePage({ loaderData }: Route.ComponentProps) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return <Render config={componentConfig} data={loaderData.document as any} />;
+  return <Render config={componentConfig} data={loaderData.document} />;
 }
