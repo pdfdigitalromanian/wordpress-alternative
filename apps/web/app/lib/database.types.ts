@@ -39,6 +39,141 @@ export type Database = {
   }
   public: {
     Tables: {
+      pages: {
+        Row: {
+          created_at: string
+          created_by: string
+          draft_document: Json
+          draft_updated_at: string
+          draft_updated_by: string | null
+          id: string
+          site_id: string
+          slug: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          draft_document?: Json
+          draft_updated_at?: string
+          draft_updated_by?: string | null
+          id?: string
+          site_id: string
+          slug: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          draft_document?: Json
+          draft_updated_at?: string
+          draft_updated_by?: string | null
+          id?: string
+          site_id?: string
+          slug?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pages_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "public_site_by_hostname"
+            referencedColumns: ["site_id"]
+          },
+          {
+            foreignKeyName: "pages_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      release_pages: {
+        Row: {
+          document: Json
+          id: string
+          page_id: string | null
+          release_id: string
+          slug: string
+          title: string
+        }
+        Insert: {
+          document: Json
+          id?: string
+          page_id?: string | null
+          release_id: string
+          slug: string
+          title: string
+        }
+        Update: {
+          document?: Json
+          id?: string
+          page_id?: string | null
+          release_id?: string
+          slug?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "release_pages_page_id_fkey"
+            columns: ["page_id"]
+            isOneToOne: false
+            referencedRelation: "pages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "release_pages_release_id_fkey"
+            columns: ["release_id"]
+            isOneToOne: false
+            referencedRelation: "releases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      releases: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          label: string | null
+          site_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          label?: string | null
+          site_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          label?: string | null
+          site_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "releases_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "public_site_by_hostname"
+            referencedColumns: ["site_id"]
+          },
+          {
+            foreignKeyName: "releases_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       site_domains: {
         Row: {
           created_at: string
@@ -83,6 +218,7 @@ export type Database = {
       }
       sites: {
         Row: {
+          active_release_id: string | null
           created_at: string
           id: string
           name: string
@@ -91,6 +227,7 @@ export type Database = {
           workspace_id: string
         }
         Insert: {
+          active_release_id?: string | null
           created_at?: string
           id?: string
           name: string
@@ -99,6 +236,7 @@ export type Database = {
           workspace_id: string
         }
         Update: {
+          active_release_id?: string | null
           created_at?: string
           id?: string
           name?: string
@@ -107,6 +245,13 @@ export type Database = {
           workspace_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "sites_active_release_id_fkey"
+            columns: ["active_release_id"]
+            isOneToOne: false
+            referencedRelation: "releases"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "sites_workspace_id_fkey"
             columns: ["workspace_id"]
@@ -198,6 +343,26 @@ export type Database = {
       is_workspace_member: {
         Args: { target_workspace_id: string }
         Returns: boolean
+      }
+      publish_site: {
+        Args: { release_label?: string; target_site_id: string }
+        Returns: {
+          created_at: string
+          created_by: string
+          id: string
+          label: string | null
+          site_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "releases"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      rollback_site: {
+        Args: { target_release_id: string; target_site_id: string }
+        Returns: undefined
       }
       workspace_role_of: {
         Args: { target_workspace_id: string }
