@@ -9,6 +9,7 @@
     "typecheck": "react-router typegen && tsc"
   },
   "dependencies": {
+    "@puckeditor/core": "^0.23.0",
     "@react-router/node": "^8.4.0",
     "@react-router/serve": "^8.4.0",
     "@supabase/ssr": "^0.12.7",

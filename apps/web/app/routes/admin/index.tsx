@@ -1,4 +1,4 @@
-import { Form, useActionData, useLoaderData, useNavigation } from "react-router";
+import { Form, Link, useActionData, useLoaderData, useNavigation } from "react-router";
 import { createSupabaseServerClient } from "~/lib/supabase.server";
 import type { Route } from "./+types/index";
 
@@ -130,7 +130,9 @@ export default function AdminOverview() {
               {workspace.sites.map((site) => (
                 <li key={site.id} className="rounded-md bg-gray-50 p-3 dark:bg-gray-900">
                   <div className="mb-2">
-                    <strong>{site.name}</strong>{" "}
+                    <Link to={`/admin/sites/${site.id}`} className="font-semibold hover:underline">
+                      {site.name}
+                    </Link>{" "}
                     <code className="text-sm text-gray-500">({site.slug})</code>
                   </div>
 
