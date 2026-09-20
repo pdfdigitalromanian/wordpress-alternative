@@ -96,14 +96,45 @@ for the full explanation) rather than depending on trigger timing.
 Part A §4 (blank theme + design tokens), §5 (Puck-based editor), §10
 (publish/release/rollback model).
 
-- Component registry package (`packages/component-registry`) — created
-  here, not in M0, once the editor is its first real consumer.
-- Puck integration: canvas, layer tree, inspector (Content/Layout/Style/
-  Responsive/Advanced), responsive overrides, autosave + explicit publish.
-- Draft vs. published separation: immutable releases, atomic publish
-  pointer update, rollback, optimistic-concurrency protection against
-  overwriting a newer edit.
-- Editor bundle kept out of public renderer bundle (verified, not assumed).
+- [x] Schema: `pages` (draft_document), `releases`/`release_pages`
+      (immutable snapshots), `sites.active_release_id`, and the
+      `publish_site()`/`rollback_site()` RPCs (SECURITY DEFINER, own
+      role check, atomic) —
+      `supabase/migrations/20260920155805_pages_releases_publishing.sql`.
+      Bug found and fixed by `supabase/tests/publish-rollback.mjs`
+      (`pnpm test:publish`, 18/18 passing): a NULL workspace role (non-
+      member) silently passed PL/pgSQL's `IF ... THEN raise` check.
+- [x] Component registry (`apps/web/app/lib/component-registry/config.tsx`,
+      not a separate `packages/` workspace package — nothing else
+      consumes it yet, so the extra tooling would be premature; promoting
+      it is a mechanical follow-up if that changes): Section (slot),
+      Heading, Text, Button. Shared verbatim between editor and renderer.
+- [x] Puck integration (`@puckeditor/core`, not the deprecated
+      `@measured/puck`) at `/admin/sites/:siteId/pages/:pageId`: canvas +
+      autosave via debounced fetcher with optimistic-concurrency conflict
+      detection. Inspector is Puck's own generated field UI for now
+      (Content-equivalent only) — the full Content/Layout/Style/
+      Responsive/Advanced split from Part A SS5 is a later refinement once
+      there are enough component fields to organize.
+- [x] Draft vs. published separation: `/admin/sites/:siteId` has Publish
+      (creates an immutable release, atomically moves the pointer) and
+      release history with per-release rollback.
+- [x] Editor bundle kept out of public renderer bundle — verified in the
+      built output, not assumed: importing `Render` from the main
+      `@puckeditor/core` entry pulled the ~455KB drag-and-drop editor
+      (dnd-kit, ActionBar, Drawer) into the public route via shared
+      chunking; switched the public route to the dedicated `rsc` entry
+      point, public chunk is now ~17KB with zero editor-chrome strings.
+- [x] `routes/site-page.tsx` (replacing the M1 placeholder) resolves
+      host -> site -> active release -> page-by-path and server-renders
+      the real published Puck document.
+- [ ] Responsive (desktop/tablet/mobile) style overrides, layer
+      navigator, copy/paste, keyboard shortcuts, reusable/global
+      components, revision history beyond releases — not yet built.
+      Puck's own drag/reorder/undo-redo and inline editing come from the
+      library itself and were not re-verified interaction-by-interaction
+      (only autosave/publish/rollback were driven programmatically; the
+      canvas UX itself needs a real browser pass).
 
 ## M3 — Content, media, navigation, forms
 
