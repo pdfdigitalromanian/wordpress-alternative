@@ -13,8 +13,16 @@ requirement because commerce was added.
 > combining Part A §14's five milestones with Part B's commerce additions,
 > following the same ordering logic (auth/ownership → editor/publishing →
 > content/media/forms → integrations/SEO/domains → 3D/hardening), plus
-> Part B's commerce milestones layered alongside. Treat M1+ as a proposed
-> plan to confirm/adjust, not a verbatim reproduction of unseen text.
+> Part B's commerce milestones layered alongside. **That M1-onward
+> synthesis is this plan's own reconstruction, not the original brief —**
+> and it got the priority wrong: it put storefront/checkout in M5, after
+> generic content/media/forms in M3. An explicit work order (2026-09-20,
+> reviewing commit `b5ded70`) corrected this: a usable storefront (catalog
+> + persistent cart) comes before expanding generic CMS content features
+> or rebuilding native Medusa Admin screens. **`docs/progress.md` is the
+> current source of truth for what's actually built and what's next** —
+> the milestone labels below are kept for traceability to the original
+> requirement numbering, not as the authoritative sequence anymore.
 
 ## M0 — Repository and local infrastructure — **done** (2026-09-19)
 
@@ -136,9 +144,78 @@ Part A §4 (blank theme + design tokens), §5 (Puck-based editor), §10
       (only autosave/publish/rollback were driven programmatically; the
       canvas UX itself needs a real browser pass).
 
-## M3 — Content, media, navigation, forms
+## M3 (reprioritized) — Store connection + a working catalog and cart
 
-Part A §8 (posts/collections/templates), §12 (media/forms/navigation).
+Originally split across M4/M5 below; pulled forward by the 2026-09-20 work
+order ahead of generic content/media/forms (Part A §8/§12, now M4). Part B
+§18 (commerce_connections registry), §19 (Setup/status + Products rows of
+the Store table — the rest of that table is deferred, not built), §20
+(server boundary), §21 (first commerce Puck component), §22 (catalog +
+cart specifically — checkout/payment is the *next* milestone, not this
+one).
+
+- [x] `commerce_connections` (Part B §18): one connection per site,
+      encrypted secret key (AES-256-GCM, site+provider identity bound
+      into the AAD), RLS scoped to owner/administrator.
+      `supabase/migrations/20260920172727_commerce_connections.sql`.
+- [x] Server boundary (`apps/web/app/lib/medusa.server.ts`): Admin API
+      (secret key, HTTP Basic auth — verified against a live instance;
+      Bearer gets a 401 naming Basic as required) and Store API
+      (publishable key, `x-publishable-api-key` header) as separate
+      surfaces, never mixed. SSRF guard: operator allowlist
+      (`COMMERCE_ALLOWED_BACKEND_ORIGINS`) checked first, a
+      production-gated localhost exception, embedded-credential
+      rejection, no redirect-following, and the connection pinned to a
+      once-resolved, validated IP (closes a DNS-rebinding TOCTOU gap).
+      9 regression tests (`pnpm test` in `apps/web`) — one caught a real
+      bug (a private-IP-in-dev check that wrongly admitted any RFC1918
+      address, not just localhost) before it shipped.
+      Responses validated with zod into explicit DTOs, not `as` casts.
+- [x] `/admin/sites/:siteId/store`: save/test/remove connection, masked
+      key display, four distinct honest failure reasons (unauthorized /
+      unreachable / SSRF-blocked / unsupported) — verified all four
+      live. `/admin/sites/:siteId/store/products`: real product list.
+      Native Medusa Admin link/full parity (inventory, orders, customers,
+      promotions, shipping/regions, presentation) — **deferred, not
+      built**; see Part B §19's explicit interim-delivery note.
+- [x] `lib/commerce.server.ts`: the storefront adapter.
+      `resolveStorefront()` distinguishes no-connection / no-publishable-
+      key / connection-not-tested / no-region rather than treating any
+      200 as ready. `resolveCart()` gets-or-creates a real Medusa cart
+      via a signed, HttpOnly, site-scoped cookie holding only the opaque
+      cart ID.
+- [x] `/shop`, `/products/:handle`, `/cart` — reserved commerce routes
+      ahead of the CMS catch-all. Real product data, Medusa-computed
+      totals (never trusts browser-submitted amounts), honest
+      out-of-stock/insufficient-inventory messaging (verified live by
+      temporarily setting real stock to 1 via the Admin API and
+      confirming the rejection through the actual route, then
+      restoring it), 404 for unknown handles, cart persists across
+      reload and is isolated per browser session.
+- [x] `ProductGrid` — first commerce Puck component
+      (`component-registry/config.tsx`). Its `resolveData` fetches an
+      isomorphic API route (`api.storefront-products.tsx`) rather than
+      importing `medusa.server.ts` directly, since Puck runs
+      `resolveData` in the *browser* during live editor preview, where
+      `node:dns`/`undici` don't exist. `resolveAllData` resolves it
+      server-side, fresh per request from the stored *unresolved*
+      document, before `<Render>` — verified a live Medusa price change
+      shows up on next page view without republishing the CMS release
+      (i.e. publish/rollback genuinely never touch Medusa state, in
+      either direction).
+- [ ] Category/collection **picker UI** for ProductGrid — currently a
+      plain category-ID text field, not a picker. Multi-region stores —
+      only a single-region store has been tested; `resolveStorefront`
+      currently takes the first region, documented as a visible
+      simplification.
+- [ ] Guest checkout, shipping/payment, order confirmation — explicitly
+      the *next* milestone (Part B §6), not started.
+
+## M4 — Content, media, navigation, forms, SEO, domains, integrations
+
+Part A §8 (posts/collections/templates), §9 (SEO/sitemap/redirects), §11
+(non-commerce integrations), §12 (media/forms/navigation), §13 (domain
+verification).
 
 - Collections with typed fields, relationships, schema migration path.
 - Media library (Supabase Storage): folders, metadata, alt text, usage
@@ -146,41 +223,37 @@ Part A §8 (posts/collections/templates), §12 (media/forms/navigation).
 - Forms: definitions, submissions persisted server-side, notification
   delivery tracked separately from submission storage, rate limiting.
 - Navigation: nested menus, page-ID references that survive slug changes.
-
-## M4 — Integrations, SEO, domains — and Store setup/status + product editor
-
-Part A §9 (SEO/sitemap/redirects), §11 (integrations/credentials), §13
-(domains). Part B §19 ("Setup/status" and "Products" rows of the Store
-area only — the rest of that table follows in M5), §20 (server boundary to
-Medusa Admin), §25 (bootstrap contract).
-
 - SEO: metadata, canonicals from verified domains, sitemap/robots,
-  structured data, redirect management with loop detection.
-- Integrations area: encrypted per-site credentials, masked-after-save,
-  one working email provider adapter.
-- Domain verification (real DNS status, not a green checkmark on save).
-- Medusa side: `commerce_connections` registry (Part B §18), SSRF-guarded
-  connection testing, typed allowlisted server handlers (no open proxy to
-  Medusa Admin), Store → Setup/status and Products screens wired to real
-  Medusa APIs.
+  structured data, redirect management with loop detection. Extends to
+  product/catalog pages once M3's storefront work is further along.
+- Real DNS domain verification (the current "Mark verified" button in
+  `/admin` is an explicit manual placeholder, labeled as such — not real
+  DNS record checking).
+- Integrations area for non-commerce providers (email, analytics).
 
-## M5 — Three.js, commerce depth, responsive refinement, hardening
+## M5 — Guest checkout and the first verified test order
 
-Part A §7 (Three.js components), §14 milestone 5. Part B §19 (remaining
-Store area rows: inventory, orders, customers, promotions, shipping/
-regions, presentation), §21 (commerce editor components), §22 (storefront/
-checkout), §23 (CMS/commerce publishing separation), §24 (events/webhooks/
-file provider).
+Part B §6. Guest checkout, configured region/address/shipping selection,
+a supported payment provider in TEST mode, webhook signature verification,
+retry-safe completion via supported Medusa workflows, protected order
+confirmation, confirming the order appears in native Medusa Admin. No real
+charges, notifications, or fulfillment during tests.
+
+## M6 — Three.js, responsive refinement, production hardening
+
+Part A §7 (Three.js components), §14 milestone 5 (responsive editor
+refinements, exports). Part B §23/§24 (events/webhooks/file provider for
+commerce specifically, beyond what M5 needs for checkout), remaining Store
+table rows if a concrete workflow needs them (Part B §19's explicit
+interim-delivery note — not automatic).
 
 - Three.js scene component with typed props, lazy-loaded only on pages
   that use it, reduced-motion/WebGL-failure handling.
-- Commerce Puck components (product grid/card, variant selector, cart,
-  checkout layout) with editor/public data separation.
-- Guest checkout with a real (test-mode) payment provider, idempotent
-  order completion, webhook handling.
-- Production hardening: bundle checks (no 3D on non-3D pages, no secrets
-  in client bundles), a chosen `apps/medusa` production host, security/
-  authorization test pass across both systems.
+- Full Content/Layout/Style/Responsive/Advanced inspector split, layer
+  navigator, reusable/global components (Part A §5 refinements deferred
+  from M2).
+- Production hardening: a chosen `apps/medusa` production host,
+  server/worker split, environment separation, monitoring.
 
 ## Acceptance flow (Part A §14, unchanged)
 
@@ -191,5 +264,5 @@ Visitor gets published content+metadata in initial HTML. Owner edits a new
 draft without affecting the live page, publishes it, rolls back to the
 previous release. Cross-workspace access is verified denied. Public
 bundles contain no private keys. Pages without 3D don't download 3D deps.
-This flow is the milestone-5 exit test, run against the deployed Vercel
-app plus the chosen Medusa host, not just locally.
+This flow is the exit test for the milestones above, run against the
+deployed Vercel app plus the chosen Medusa host, not just locally.
