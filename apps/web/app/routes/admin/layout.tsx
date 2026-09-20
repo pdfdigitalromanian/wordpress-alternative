@@ -21,13 +21,17 @@ export default function AdminLayout() {
   const { email } = useLoaderData<typeof loader>();
 
   return (
-    <div>
-      <header>
-        <strong>Digital Romanian CMS — Admin</strong>
-        <span> {email}</span>
-        <Form method="post" action="/logout" style={{ display: "inline" }}>
-          <button type="submit">Sign out</button>
-        </Form>
+    <div className="admin-shell">
+      <header className="admin-header">
+        <strong className="text-lg font-semibold">Digital Romanian CMS — Admin</strong>
+        <div className="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400">
+          <span>{email}</span>
+          <Form method="post" action="/logout">
+            <button type="submit" className="btn-secondary">
+              Sign out
+            </button>
+          </Form>
+        </div>
       </header>
       <Outlet />
     </div>

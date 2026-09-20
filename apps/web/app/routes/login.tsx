@@ -38,23 +38,30 @@ export default function Login() {
   const submitting = navigation.state === "submitting";
 
   return (
-    <main>
-      <h1>Sign in</h1>
-      <p>
+    <main className="mx-auto max-w-sm px-4 py-16">
+      <h1 className="mb-2 text-2xl font-semibold">Sign in</h1>
+      <p className="mb-6 text-sm text-gray-600 dark:text-gray-400">
         There is no public sign-up here by design — accounts are created
         deliberately by a workspace owner (see <code>docs/setup.md</code>).
       </p>
-      <Form method="post">
-        <div>
+      <Form method="post" className="card">
+        <div className="field">
           <label htmlFor="email">Email</label>
-          <input id="email" name="email" type="email" autoComplete="email" required />
+          <input id="email" name="email" type="email" autoComplete="email" required className="input" />
         </div>
-        <div>
+        <div className="field">
           <label htmlFor="password">Password</label>
-          <input id="password" name="password" type="password" autoComplete="current-password" required />
+          <input
+            id="password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            required
+            className="input"
+          />
         </div>
-        {actionData?.error ? <p role="alert">{actionData.error}</p> : null}
-        <button type="submit" disabled={submitting}>
+        {actionData?.error ? <p className="alert-error">{actionData.error}</p> : null}
+        <button type="submit" disabled={submitting} className="btn mt-2 w-full justify-center">
           {submitting ? "Signing in…" : "Sign in"}
         </button>
       </Form>

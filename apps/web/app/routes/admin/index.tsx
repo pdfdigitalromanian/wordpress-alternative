@@ -106,36 +106,47 @@ export default function AdminOverview() {
 
   return (
     <main>
-      <h1>Overview</h1>
+      <h1 className="mb-6 text-2xl font-semibold">Overview</h1>
 
       <section>
-        <h2>Your workspaces</h2>
-        {workspaces.length === 0 ? <p>No workspaces yet. Create one below.</p> : null}
+        <h2 className="mb-3 text-lg font-medium">Your workspaces</h2>
+        {workspaces.length === 0 ? (
+          <p className="mb-6 text-sm text-gray-600 dark:text-gray-400">
+            No workspaces yet. Create one below.
+          </p>
+        ) : null}
 
         {workspaces.map((workspace) => (
-          <div key={workspace.id}>
-            <h3>
-              {workspace.name} <code>({workspace.slug})</code>
+          <div key={workspace.id} className="card">
+            <h3 className="mb-3 text-base font-semibold">
+              {workspace.name} <code className="text-sm font-normal text-gray-500">({workspace.slug})</code>
             </h3>
 
-            {workspace.sites.length === 0 ? <p>No sites in this workspace yet.</p> : null}
-            <ul>
+            {workspace.sites.length === 0 ? (
+              <p className="mb-3 text-sm text-gray-600 dark:text-gray-400">No sites in this workspace yet.</p>
+            ) : null}
+
+            <ul className="mb-4 space-y-4">
               {workspace.sites.map((site) => (
-                <li key={site.id}>
-                  <strong>{site.name}</strong> <code>({site.slug})</code>
-                  <ul>
+                <li key={site.id} className="rounded-md bg-gray-50 p-3 dark:bg-gray-900">
+                  <div className="mb-2">
+                    <strong>{site.name}</strong>{" "}
+                    <code className="text-sm text-gray-500">({site.slug})</code>
+                  </div>
+
+                  <ul className="mb-3 space-y-1 text-sm">
                     {site.site_domains.map((domain) => (
-                      <li key={domain.id}>
-                        {domain.hostname}{" "}
+                      <li key={domain.id} className="flex items-center gap-2">
+                        <span>{domain.hostname}</span>
                         {domain.verified_at ? (
-                          "— verified"
+                          <span className="text-green-700 dark:text-green-400">— verified</span>
                         ) : (
                           <>
-                            — not verified{" "}
-                            <Form method="post" action="?index" style={{ display: "inline" }}>
+                            <span className="text-amber-700 dark:text-amber-400">— not verified</span>
+                            <Form method="post" action="?index" className="inline">
                               <input type="hidden" name="intent" value="verify-domain" />
                               <input type="hidden" name="domain_id" value={domain.id} />
-                              <button type="submit" disabled={submitting}>
+                              <button type="submit" disabled={submitting} className="btn-secondary">
                                 Mark verified (manual — no DNS check yet)
                               </button>
                             </Form>
@@ -144,15 +155,17 @@ export default function AdminOverview() {
                       </li>
                     ))}
                   </ul>
-                  <Form method="post" action="?index">
+
+                  <Form method="post" action="?index" className="flex items-end gap-2">
                     <input type="hidden" name="intent" value="add-domain" />
                     <input type="hidden" name="site_id" value={site.id} />
-                    <label>
-                      Add domain (e.g. <code>localhost</code> for local dev, or your production
-                      hostname)
-                      <input name="hostname" type="text" required placeholder="localhost" />
-                    </label>
-                    <button type="submit" disabled={submitting}>
+                    <div className="field mb-0 flex-1">
+                      <label>
+                        Add domain (e.g. <code>localhost</code>, or your production hostname)
+                      </label>
+                      <input name="hostname" type="text" required placeholder="localhost" className="input" />
+                    </div>
+                    <button type="submit" disabled={submitting} className="btn-secondary">
                       Add domain
                     </button>
                   </Form>
@@ -160,14 +173,14 @@ export default function AdminOverview() {
               ))}
             </ul>
 
-            <Form method="post" action="?index">
+            <Form method="post" action="?index" className="flex items-end gap-2">
               <input type="hidden" name="intent" value="create-site" />
               <input type="hidden" name="workspace_id" value={workspace.id} />
-              <label>
-                New site name
-                <input name="name" type="text" required />
-              </label>
-              <button type="submit" disabled={submitting}>
+              <div className="field mb-0 flex-1">
+                <label>New site name</label>
+                <input name="name" type="text" required className="input" />
+              </div>
+              <button type="submit" disabled={submitting} className="btn-secondary">
                 Add site
               </button>
             </Form>
@@ -175,23 +188,25 @@ export default function AdminOverview() {
         ))}
       </section>
 
-      <section>
-        <h2>Create a workspace</h2>
+      <section className="card">
+        <h2 className="mb-3 text-lg font-medium">Create a workspace</h2>
         {/* Nested index routes need the `?index` marker so the form
             posts to this route's action rather than the parent layout's
             (which has none) — a known React Router quirk. */}
-        <Form method="post" action="?index">
+        <Form method="post" action="?index" className="flex items-end gap-2">
           <input type="hidden" name="intent" value="create-workspace" />
-          <label htmlFor="name">Name</label>
-          <input id="name" name="name" type="text" required />
-          <button type="submit" disabled={submitting}>
+          <div className="field mb-0 flex-1">
+            <label htmlFor="name">Name</label>
+            <input id="name" name="name" type="text" required className="input" />
+          </div>
+          <button type="submit" disabled={submitting} className="btn">
             {submitting ? "Creating…" : "Create workspace"}
           </button>
         </Form>
       </section>
 
-      {actionData && "error" in actionData ? <p role="alert">{actionData.error}</p> : null}
-      {actionData && "success" in actionData ? <p>Done.</p> : null}
+      {actionData && "error" in actionData ? <p className="alert-error">{actionData.error}</p> : null}
+      {actionData && "success" in actionData ? <p className="alert-success">Done.</p> : null}
     </main>
   );
 }

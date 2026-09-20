@@ -7,9 +7,58 @@
 
 html,
 body {
-  @apply bg-white dark:bg-gray-950;
+  @apply bg-white text-gray-900 dark:bg-gray-950 dark:text-gray-100;
 
   @media (prefers-color-scheme: dark) {
     color-scheme: dark;
+  }
+}
+
+/*
+ * Minimal shared primitives for the CMS admin shell (login, /admin).
+ * This is deliberately basic — real design tokens, the theme system, and
+ * the admin's full visual identity are a later milestone (Part A SS4/SS5).
+ * These exist so the functional M1 UI isn't unstyled HTML in the
+ * meantime.
+ */
+@layer components {
+  .admin-shell {
+    @apply mx-auto max-w-3xl px-4 py-8;
+  }
+
+  .admin-header {
+    @apply mb-8 flex items-center justify-between border-b border-gray-200 pb-4 dark:border-gray-800;
+  }
+
+  .card {
+    @apply mb-6 rounded-lg border border-gray-200 p-4 dark:border-gray-800;
+  }
+
+  .field {
+    @apply mb-3 flex flex-col gap-1;
+  }
+
+  .field label {
+    @apply text-sm font-medium text-gray-700 dark:text-gray-300;
+  }
+
+  .input {
+    @apply rounded-md border border-gray-300 px-3 py-1.5 text-sm outline-none focus:border-gray-500 dark:border-gray-700 dark:bg-gray-900;
+  }
+
+  .btn {
+    @apply inline-flex items-center rounded-md bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-300;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-900;
+  }
+
+  .alert-error {
+    @apply mt-4 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200;
+  }
+
+  .alert-success {
+    @apply mt-4 rounded-md border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-200;
   }
 }
