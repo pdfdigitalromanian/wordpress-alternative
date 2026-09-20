@@ -123,6 +123,12 @@ export default function SiteDetail() {
         ) : null}
       </p>
 
+      <p className="mb-6 text-sm">
+        <Link to={`/admin/sites/${site.id}/store`} className="hover:underline">
+          Store →
+        </Link>
+      </p>
+
       <section className="card">
         <h2 className="mb-3 text-lg font-medium">Pages</h2>
         {pages.length === 0 ? (

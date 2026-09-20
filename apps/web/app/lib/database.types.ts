@@ -39,6 +39,69 @@ export type Database = {
   }
   public: {
     Tables: {
+      commerce_connections: {
+        Row: {
+          backend_url: string
+          created_at: string
+          created_by: string
+          encrypted_secret_key: string
+          id: string
+          last_checked_at: string | null
+          last_error: string | null
+          publishable_key: string | null
+          secret_key_nonce: string
+          secret_key_tag: string
+          site_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          backend_url: string
+          created_at?: string
+          created_by: string
+          encrypted_secret_key: string
+          id?: string
+          last_checked_at?: string | null
+          last_error?: string | null
+          publishable_key?: string | null
+          secret_key_nonce: string
+          secret_key_tag: string
+          site_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          backend_url?: string
+          created_at?: string
+          created_by?: string
+          encrypted_secret_key?: string
+          id?: string
+          last_checked_at?: string | null
+          last_error?: string | null
+          publishable_key?: string | null
+          secret_key_nonce?: string
+          secret_key_tag?: string
+          site_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commerce_connections_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: true
+            referencedRelation: "public_site_by_hostname"
+            referencedColumns: ["site_id"]
+          },
+          {
+            foreignKeyName: "commerce_connections_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: true
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pages: {
         Row: {
           created_at: string

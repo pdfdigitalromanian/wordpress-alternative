@@ -14,6 +14,8 @@ export default [
     index("routes/admin/index.tsx"),
     route("sites/:siteId", "routes/admin/site.tsx"),
     route("sites/:siteId/pages/:pageId", "routes/admin/page-editor.tsx"),
+    route("sites/:siteId/store", "routes/admin/store.tsx"),
+    route("sites/:siteId/store/products", "routes/admin/store-products.tsx"),
   ]),
   route("*", "routes/site-page.tsx"),
 ] satisfies RouteConfig;
