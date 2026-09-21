@@ -55,7 +55,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   // Resolves any dynamic component data (e.g. ProductGrid's real product
   // list) server-side, before the response is ever sent — so it's in the
   // INITIAL HTML, not fetched client-side after hydration.
-  const metadata: StorefrontMetadata = { siteId: mapping.site_id, origin: url.origin };
+  const metadata: StorefrontMetadata = { siteId: mapping.site_id, origin: url.origin, mode: "public" };
   const resolvedDocument = await resolveAllData<ComponentProps>(
     releasePage.document as Partial<Data<ComponentProps>>,
     componentConfig,

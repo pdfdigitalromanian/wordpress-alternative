@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useFetcher, useLoaderData } from "react-router";
+import { useFetcher, useLoaderData, useNavigate } from "react-router";
 import { Puck, type Data } from "@puckeditor/core";
 import "@puckeditor/core/puck.css";
 import { componentConfig, type StorefrontMetadata } from "~/lib/component-registry/config";
@@ -31,7 +31,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   // fetch real data for the live editor preview via the same isomorphic
   // route (api.storefront-products.tsx) the published renderer uses —
   // see component-registry/config.tsx's resolveData.
-  const storefrontMetadata: StorefrontMetadata = { siteId: page.site_id, origin: new URL(request.url).origin };
+  const storefrontMetadata: StorefrontMetadata = {
+    siteId: page.site_id,
+    origin: new URL(request.url).origin,
+    mode: "preview",
+  };
 
   return { page, storefrontMetadata };
 }
@@ -62,7 +66,7 @@ export async function action({ request, params }: Route.ActionArgs) {
   }
 
   if (body.intent === "autosave" || body.intent === "publish") {
-    const validation = validatePuckDocument(body.document, componentConfig);
+    const validation = validatePuckDocument<Data>(body.document, componentConfig);
     if (!validation.ok) {
       return Response.json({ error: `Invalid document: ${validation.error}` }, { status: 400 });
     }
@@ -70,7 +74,10 @@ export async function action({ request, params }: Route.ActionArgs) {
     const { data, error } = await supabase
       .from("pages")
       .update({
-        draft_document: body.document,
+        // The SANITIZED projection, not the raw client payload — strips
+        // Puck's resolveData extras (resolvedProducts, etc.) rather than
+        // persisting them. See validate.server.ts.
+        draft_document: validation.document,
         draft_updated_at: new Date().toISOString(),
         draft_updated_by: user.id,
       })
@@ -107,21 +114,45 @@ export async function action({ request, params }: Route.ActionArgs) {
 
 const AUTOSAVE_DEBOUNCE_MS = 800;
 
+type SaveStatus = "idle" | "saving" | "saved" | "conflict" | "error" | "publishing" | "published";
+
 export default function PageEditor() {
   const { page, storefrontMetadata } = useLoaderData<typeof loader>();
   const fetcher = useFetcher();
+  const navigate = useNavigate();
   const [mounted, setMounted] = useState(false);
-  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "conflict" | "error" | "publishing" | "published">(
-    "idle",
-  );
+  const [status, setStatus] = useState<SaveStatus>("idle");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const knownUpdatedAtRef = useRef(page.draft_updated_at);
   const latestDataRef = useRef<Data | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingRef = useRef(false);
+  // Distinct from "is a debounce timer pending" — this is "does the
+  // server not yet have the latest edit", true from the moment
+  // handleChange fires until a save actually lands, spanning any number
+  // of debounce/in-flight/queued cycles in between.
+  const dirtyRef = useRef(false);
+  // If handleChange (or a deliberate flush) happens while a submission
+  // is already in flight, we don't fire a second concurrent request
+  // (whose response could land out of order and stomp the newer
+  // knownUpdatedAt) — we queue it and fire once the current one settles.
+  const queuedIntentRef = useRef<"autosave" | "publish" | null>(null);
+  const leavingToRef = useRef<string | null>(null);
 
   useEffect(() => setMounted(true), []);
+
+  function doSubmit(intent: "autosave" | "publish") {
+    if (!latestDataRef.current) return;
+    setStatus(intent === "publish" ? "publishing" : "saving");
+    fetcher.submit(
+      {
+        intent,
+        document: latestDataRef.current,
+        knownUpdatedAt: knownUpdatedAtRef.current,
+      } as unknown as Parameters<typeof fetcher.submit>[0],
+      { method: "post", encType: "application/json" },
+    );
+  }
 
   useEffect(() => {
     if (fetcher.state !== "idle" || !fetcher.data) return;
@@ -136,27 +167,51 @@ export default function PageEditor() {
     if (result.conflict) {
       setStatus("conflict");
       setStatusMessage("Someone else saved a newer version — reload this page.");
+      queuedIntentRef.current = null; // can't safely retry against a known-stale token
+      leavingToRef.current = null;
       return;
     }
     if (result.error) {
       setStatus("error");
       setStatusMessage(result.error);
+      queuedIntentRef.current = null;
+      leavingToRef.current = null;
       return;
     }
+
     if (result.draftUpdatedAt) knownUpdatedAtRef.current = result.draftUpdatedAt;
+
+    // A queued edit/intent arrived while this request was in flight —
+    // it's still not persisted, so we're not clean yet; fire it now that
+    // the previous request has settled, rather than losing it.
+    if (queuedIntentRef.current) {
+      const nextIntent = queuedIntentRef.current;
+      queuedIntentRef.current = null;
+      doSubmit(nextIntent);
+      return;
+    }
+
+    dirtyRef.current = false;
 
     if (result.published) {
       setStatus("published");
       setStatusMessage("Published.");
-      return;
-    }
-    if (result.publishError) {
+    } else if (result.publishError) {
       setStatus("error");
       setStatusMessage(`Draft saved, but publish failed: ${result.publishError}`);
-      return;
+    } else {
+      setStatus("saved");
+      setStatusMessage(null);
     }
-    setStatus("saved");
-    setStatusMessage(null);
+
+    // A navigation was waiting on this save (see handleBackClick) —
+    // now that it's confirmed clean, actually leave.
+    if (leavingToRef.current) {
+      const to = leavingToRef.current;
+      leavingToRef.current = null;
+      navigate(to);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetcher.state, fetcher.data]);
 
   function flush(intent: "autosave" | "publish" = "autosave") {
@@ -164,61 +219,71 @@ export default function PageEditor() {
       clearTimeout(debounceRef.current);
       debounceRef.current = null;
     }
-    if (!latestDataRef.current) return;
-    pendingRef.current = false;
-    setStatus(intent === "publish" ? "publishing" : "saving");
-    fetcher.submit(
-      {
-        intent,
-        document: latestDataRef.current,
-        knownUpdatedAt: knownUpdatedAtRef.current,
-      } as unknown as Parameters<typeof fetcher.submit>[0],
-      { method: "post", encType: "application/json" },
-    );
+    if (fetcher.state !== "idle") {
+      // Something's already in flight — remember the strongest intent
+      // (publish outranks a plain autosave) and let the effect above
+      // fire it once that request settles.
+      queuedIntentRef.current = intent === "publish" ? "publish" : (queuedIntentRef.current ?? intent);
+      return;
+    }
+    doSubmit(intent);
   }
 
   function handleChange(data: Data) {
     latestDataRef.current = data;
-    pendingRef.current = true;
+    dirtyRef.current = true;
     setStatus("saving");
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => flush("autosave"), AUTOSAVE_DEBOUNCE_MS);
   }
 
-  // Flush any pending debounced save on unmount (e.g. the user clicks
-  // "back" before the debounce timer fires) — otherwise the last edit
-  // is silently lost rather than saved.
+  function handleBackClick(event: React.MouseEvent) {
+    event.preventDefault();
+    const to = `/admin/sites/${page.site_id}`;
+    if (dirtyRef.current || fetcher.state !== "idle") {
+      // Wait for the in-flight/queued save to actually land (confirmed
+      // clean, not just "a request was sent") before leaving — a fire-
+      // and-forget submit here would race the navigation and could lose
+      // the edit or hide a conflict/error the user never gets to see.
+      leavingToRef.current = to;
+      flush("autosave");
+    } else {
+      navigate(to);
+    }
+  }
+
+  // Best-effort only: browsers don't reliably wait for async work queued
+  // from beforeunload, so this can't get the same guarantee as
+  // handleBackClick's in-app navigation does. It at least attempts a
+  // synchronous-ish flush via sendBeacon-style fire-and-forget for the
+  // tab-close/refresh case, and warns the user rather than saying nothing.
   useEffect(() => {
-    return () => {
-      if (pendingRef.current && debounceRef.current) {
-        clearTimeout(debounceRef.current);
-        if (latestDataRef.current) {
-          fetcher.submit(
-            {
-              intent: "autosave",
-              document: latestDataRef.current,
-              knownUpdatedAt: knownUpdatedAtRef.current,
-            } as unknown as Parameters<typeof fetcher.submit>[0],
-            { method: "post", encType: "application/json" },
-          );
-        }
+    function onBeforeUnload(e: BeforeUnloadEvent) {
+      if (dirtyRef.current || fetcher.state !== "idle") {
+        e.preventDefault();
       }
-    };
+    }
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
-    <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
+    // Fixed/full-viewport, breaking out of the parent admin layout's
+    // `.admin-shell` max-width (768px, meant for ordinary admin forms/
+    // lists) — Puck's own 4-column layout (icon rail + blocks panel +
+    // canvas + fields panel, ~68+320+48+320px before the canvas even
+    // gets space) needs full viewport width. Confirmed via a real
+    // browser: without this, the canvas rendered at ~48px wide, making
+    // the editor unusable. This route already has its own header
+    // (below) that duplicates admin/layout.tsx's, by design — the
+    // editor is meant to be an immersive full-screen tool, same as
+    // Puck's own reference usage.
+    <div style={{ position: "fixed", inset: 0, zIndex: 50, background: "white", display: "flex", flexDirection: "column" }}>
       <div className="flex items-center justify-between border-b border-gray-200 px-4 py-2 text-sm dark:border-gray-800">
-        <Link
-          to={`/admin/sites/${page.site_id}`}
-          className="hover:underline"
-          onClick={() => {
-            if (pendingRef.current) flush("autosave");
-          }}
-        >
+        <a href={`/admin/sites/${page.site_id}`} className="hover:underline" onClick={handleBackClick}>
           ← {page.title}
-        </Link>
+        </a>
         <div className="flex items-center gap-3">
           <span className="text-gray-600 dark:text-gray-400">
             {status === "saving" && "Saving…"}
@@ -244,7 +309,7 @@ export default function PageEditor() {
           </button>
         </div>
       </div>
-      <div style={{ flex: 1, minHeight: 0 }}>
+      <div style={{ flex: 1, minHeight: 0, width: "100%", minWidth: 0 }}>
         {mounted ? (
           <Puck
             config={componentConfig}

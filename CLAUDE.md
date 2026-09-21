@@ -81,6 +81,20 @@ product by stable ID; it never carries authoritative price or stock.
   not a hardcoded value. See `apps/web/app/lib/medusa.server.ts`.
 - **Publishing a CMS release never touches Medusa state** (prices, stock,
   orders), and rolling a release back never touches it either.
-- No browser-automation tool is available in this environment. HTTP-level
-  and SSR-output verification substitutes for it; a real click-through is
-  named as a blocked verification, not silently skipped.
+- **Do not infer authorization for hosted writes, git push, credential
+  rotation, deployment, paid services, or payment-provider operations
+  from a general "continue."** `test:rls` and `test:publish` write to and
+  delete from the *hosted* Supabase project — they are not harmless reads.
+  Confirm the named environment/operation before running them, pushing,
+  or performing anything externally visible or hard to reverse.
+- **Browser verification: check capability, don't assume it.** No MCP
+  browser connector (`mcp__Claude_Browser__*`, `mcp__claude-in-chrome__*`)
+  is available in this environment, but a CLI-driven browser is a
+  separate capability — `@playwright/test` plus an installed Chromium
+  work here (verified 2026-09-21: `npx playwright install chromium
+  --with-deps` found browsers already cached; a `chromium.launch()` smoke
+  test loaded a real page). Use `pnpm test:e2e` (Playwright) in
+  `apps/web` for actual click-through verification; don't substitute curl
+  for it and call it "browser verification." If Playwright genuinely
+  fails in a future environment, record the exact install/launch error
+  and the retry command — don't assume the limitation without trying.

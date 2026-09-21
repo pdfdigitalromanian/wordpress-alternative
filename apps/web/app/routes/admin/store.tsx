@@ -1,6 +1,6 @@
 import { Form, Link, useActionData, useLoaderData, useNavigation } from "react-router";
 import { bufferToPgBytea, decryptSecret, encryptSecret, maskSecret, pgByteaToBuffer } from "~/lib/secrets.server";
-import { testMedusaConnection } from "~/lib/medusa.server";
+import { testMedusaConnection, listStoreRegions, type StoreRegion } from "~/lib/medusa.server";
 import { createSupabaseServerClient } from "~/lib/supabase.server";
 import type { Route } from "./+types/store";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -45,7 +45,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   const { data: connection, error: connectionError } = await supabase
     .from("commerce_connections")
-    .select("id, backend_url, publishable_key, status, last_checked_at, last_error")
+    .select("id, backend_url, publishable_key, status, last_checked_at, last_error, default_region_id")
     .eq("site_id", siteId)
     .maybeSingle();
   if (connectionError) throw new Response(connectionError.message, { status: 500 });
@@ -55,12 +55,17 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   // computed via a fresh, separate decrypt, and only the mask leaves
   // this function.
   let maskedKey: string | null = null;
+  let regions: StoreRegion[] = [];
   if (connection) {
     const decrypted = await loadDecryptedSecretKey(supabase, siteId);
     maskedKey = "error" in decrypted ? "(unreadable — re-enter the key)" : maskSecret(decrypted.secretKey);
+
+    if (connection.status === "connected" && connection.publishable_key) {
+      regions = await listStoreRegions(connection.backend_url, connection.publishable_key).catch(() => []);
+    }
   }
 
-  return { site, connection, maskedKey };
+  return { site, connection, maskedKey, regions };
 }
 
 export async function action({ request, params }: Route.ActionArgs) {
@@ -120,6 +125,16 @@ export async function action({ request, params }: Route.ActionArgs) {
     return { intent, success: true };
   }
 
+  if (intent === "save-region") {
+    const regionId = String(formData.get("region_id") ?? "") || null;
+    // RLS on commerce_connections (owner/administrator only) is the real
+    // permission check here — this update simply goes through the same
+    // user-scoped client every other write in this route uses.
+    const { error } = await supabase.from("commerce_connections").update({ default_region_id: regionId }).eq("site_id", siteId);
+    if (error) return { intent, error: error.message };
+    return { intent, success: true };
+  }
+
   if (intent === "delete-connection") {
     const { error } = await supabase.from("commerce_connections").delete().eq("site_id", siteId);
     if (error) return { intent, error: error.message };
@@ -130,7 +145,7 @@ export async function action({ request, params }: Route.ActionArgs) {
 }
 
 export default function StoreSetup() {
-  const { site, connection, maskedKey } = useLoaderData<typeof loader>();
+  const { site, connection, maskedKey, regions } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const submitting = navigation.state === "submitting";
@@ -197,6 +212,17 @@ export default function StoreSetup() {
                   View products
                 </Link>
               ) : null}
+              {/* Native Medusa Admin — a separate app with its OWN
+                  authentication (Part B SS4/work-order item 4). Not SSO:
+                  Supabase login here does not log you into it. */}
+              <a
+                href={`${connection.backend_url.replace(/\/$/, "")}/app`}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="btn-secondary"
+              >
+                Open Medusa Admin ↗
+              </a>
               <Form method="post">
                 <input type="hidden" name="intent" value="delete-connection" />
                 <button type="submit" disabled={submitting} className="btn-secondary">
@@ -204,11 +230,42 @@ export default function StoreSetup() {
                 </button>
               </Form>
             </div>
+            <p className="mt-2 text-xs text-gray-500">
+              Products, inventory, orders, customers, promotions and fulfillment are managed in Medusa Admin for now
+              (Part B §19) — sign in there separately; this link does not carry your CMS session.
+            </p>
           </>
         ) : (
           <p className="mb-3 text-sm text-gray-600 dark:text-gray-400">No connection configured yet.</p>
         )}
       </section>
+
+      {connection?.status === "connected" && regions.length > 0 ? (
+        <section className="card">
+          <h2 className="mb-3 text-lg font-medium">Default region</h2>
+          <p className="mb-3 text-sm text-gray-600 dark:text-gray-400">
+            A single-region default is enough for this milestone (multi-region selection per product/cart is a later
+            refinement). Storefront prices, currency and available countries all follow this region.
+          </p>
+          <Form method="post" className="flex items-end gap-2">
+            <input type="hidden" name="intent" value="save-region" />
+            <div className="field mb-0 flex-1">
+              <label htmlFor="region_id">Region</label>
+              <select id="region_id" name="region_id" className="input" defaultValue={connection.default_region_id ?? ""}>
+                <option value="">(none — use the backend's first region)</option>
+                {regions.map((region) => (
+                  <option key={region.id} value={region.id}>
+                    {region.name} ({region.currency_code.toUpperCase()})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button type="submit" disabled={submitting} className="btn">
+              Save
+            </button>
+          </Form>
+        </section>
+      ) : null}
 
       <section className="card">
         <h2 className="mb-3 text-lg font-medium">{connection ? "Replace connection" : "Add connection"}</h2>

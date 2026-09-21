@@ -46,10 +46,16 @@ export type ComponentProps = {
 
 /** metadata shape both <Puck> (editor) and <Render>/resolveAllData
  * (public) are called with — see page-editor.tsx, site-page.tsx, shop.tsx.
+ * `mode` picks which of the two trust-boundary-separated API routes
+ * resolveData below calls: "preview" (staff-authenticated, explicit
+ * siteId — the site being edited may have no public domain yet) or
+ * "public" (host-derived siteId only, no query-string siteId is ever
+ * sent — see api.storefront-products.tsx).
  */
 export type StorefrontMetadata = {
   siteId: string;
   origin: string;
+  mode: "preview" | "public";
 };
 
 const paddingValues: Record<ComponentProps["Section"]["padding"], string> = {
@@ -149,7 +155,12 @@ export const componentConfig: Config<ComponentProps> = {
           return { props: { ...props, resolvedProducts: [], resolvedError: null } };
         }
 
-        const url = new URL("/api/storefront-products", meta.origin);
+        // Two separate, trust-boundary-separated endpoints (see
+        // api.storefront-products.tsx / api.preview-storefront-
+        // products.tsx) — never one endpoint that trusts an anonymous
+        // caller's siteId query param.
+        const path = meta.mode === "preview" ? "/api/preview-storefront-products" : "/api/storefront-products";
+        const url = new URL(path, meta.origin);
         url.searchParams.set("siteId", meta.siteId);
         url.searchParams.set("limit", String(props.limit ?? 8));
         if (props.categoryId) url.searchParams.set("categoryId", props.categoryId);

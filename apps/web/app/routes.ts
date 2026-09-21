@@ -18,6 +18,7 @@ export default [
     route("sites/:siteId/store/products", "routes/admin/store-products.tsx"),
   ]),
   route("api/storefront-products", "routes/api.storefront-products.tsx"),
+  route("api/preview-storefront-products", "routes/api.preview-storefront-products.tsx"),
   // Reserved commerce routes, resolved through the same verified
   // site/domain mapping as everything public. Registered before the
   // catch-all so a page a CMS author creates at slug "shop" or
@@ -26,5 +27,10 @@ export default [
   route("shop", "routes/shop.tsx"),
   route("products/:handle", "routes/product-detail.tsx"),
   route("cart", "routes/cart.tsx"),
+  route("checkout", "routes/checkout.tsx"),
+  // No order ID in this path on purpose — access is entirely via the
+  // signed, short-lived cookie set at checkout completion, so there's
+  // nothing to guess/increment from the URL at all.
+  route("checkout/confirmation", "routes/checkout-confirmation.tsx"),
   route("*", "routes/site-page.tsx"),
 ] satisfies RouteConfig;

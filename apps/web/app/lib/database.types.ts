@@ -44,6 +44,7 @@ export type Database = {
           backend_url: string
           created_at: string
           created_by: string
+          default_region_id: string | null
           encrypted_secret_key: string
           id: string
           last_checked_at: string | null
@@ -59,6 +60,7 @@ export type Database = {
           backend_url: string
           created_at?: string
           created_by: string
+          default_region_id?: string | null
           encrypted_secret_key: string
           id?: string
           last_checked_at?: string | null
@@ -74,6 +76,7 @@ export type Database = {
           backend_url?: string
           created_at?: string
           created_by?: string
+          default_region_id?: string | null
           encrypted_secret_key?: string
           id?: string
           last_checked_at?: string | null

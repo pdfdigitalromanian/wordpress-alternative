@@ -385,18 +385,84 @@ const CartLineItemSchema = z.object({
   variant_id: z.string().nullable().optional(),
 });
 
+const AddressSchema = z.object({
+  first_name: z.string().nullable().optional(),
+  last_name: z.string().nullable().optional(),
+  address_1: z.string().nullable().optional(),
+  address_2: z.string().nullable().optional(),
+  city: z.string().nullable().optional(),
+  country_code: z.string().nullable().optional(),
+  province: z.string().nullable().optional(),
+  postal_code: z.string().nullable().optional(),
+  phone: z.string().nullable().optional(),
+});
+export type StoreAddress = z.infer<typeof AddressSchema>;
+
+// `name` is present on a *shipping option listing* (ShippingOptionSchema
+// below, from /store/shipping-options) but NOT on a cart's own
+// shipping_methods[] entries (confirmed against a live response: an
+// added method has amount/shipping_option_id/id/tax_lines/adjustments,
+// no name) — this schema was wrong until a real checkout run (not a
+// hand-crafted test) surfaced it as a zod parse failure.
+const ShippingMethodSchema = z.object({
+  id: z.string(),
+  name: z.string().nullable().optional(),
+  amount: z.number().nullable().optional(),
+  shipping_option_id: z.string().nullable().optional(),
+});
+
+const PaymentSessionSchema = z.object({
+  id: z.string(),
+  provider_id: z.string(),
+  status: z.string().optional(),
+  // Provider-specific — e.g. Stripe's client_secret lives here. Passed
+  // through opaquely; only the specific keys a given provider's client
+  // widget needs are read by callers, never logged wholesale (may
+  // contain a payment-session client secret).
+  data: z.record(z.string(), z.unknown()).optional(),
+});
+
+const PaymentCollectionSchema = z.object({
+  id: z.string(),
+  currency_code: z.string(),
+  amount: z.number().nullable().optional(),
+  status: z.string().optional(),
+  payment_sessions: z.array(PaymentSessionSchema).optional().default([]),
+});
+export type StorePaymentCollection = z.infer<typeof PaymentCollectionSchema>;
+
 const CartSchema = z.object({
   id: z.string(),
   currency_code: z.string(),
   region_id: z.string().nullable().optional(),
+  email: z.string().nullable().optional(),
   items: z.array(CartLineItemSchema).default([]),
   item_total: z.number().nullable().optional(),
   total: z.number().nullable().optional(),
   subtotal: z.number().nullable().optional(),
   tax_total: z.number().nullable().optional(),
   shipping_total: z.number().nullable().optional(),
+  shipping_address: AddressSchema.nullable().optional(),
+  billing_address: AddressSchema.nullable().optional(),
+  shipping_methods: z.array(ShippingMethodSchema).optional().default([]),
+  payment_collection: PaymentCollectionSchema.nullable().optional(),
+  completed_at: z.string().nullable().optional(),
 });
 export type StoreCart = z.infer<typeof CartSchema>;
+
+const ShippingOptionSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  calculated_price: z
+    .object({ calculated_amount: z.number().nullable(), currency_code: z.string() })
+    .nullable()
+    .optional(),
+  insufficient_inventory: z.boolean().optional(),
+});
+export type StoreShippingOption = z.infer<typeof ShippingOptionSchema>;
+
+const PaymentProviderSchema = z.object({ id: z.string(), is_enabled: z.boolean().optional() });
+export type StorePaymentProvider = z.infer<typeof PaymentProviderSchema>;
 
 export async function createStoreCart(
   backendUrl: string,
@@ -493,6 +559,183 @@ export async function removeStoreCartLineItem(
     return { ok: true, cart };
   } catch (error) {
     return { ok: false, reason: "remove_failed", message: error instanceof Error ? error.message : "Unknown error" };
+  }
+}
+
+export async function updateStoreCart(
+  backendUrl: string,
+  publishableKey: string,
+  cartId: string,
+  body: { email?: string; shipping_address?: StoreAddress; billing_address?: StoreAddress },
+): Promise<CartMutationResult> {
+  try {
+    const data = await fetchMedusaJson(
+      { backendUrl, path: `/store/carts/${cartId}`, authHeader: publishableKey, method: "POST", body },
+      z.object({ cart: CartSchema }),
+    );
+    return { ok: true, cart: data.cart };
+  } catch (error) {
+    return { ok: false, reason: "update_failed", message: error instanceof Error ? error.message : "Unknown error" };
+  }
+}
+
+export async function listShippingOptions(
+  backendUrl: string,
+  publishableKey: string,
+  cartId: string,
+): Promise<StoreShippingOption[]> {
+  const data = await fetchMedusaJson(
+    { backendUrl, path: "/store/shipping-options", authHeader: publishableKey, searchParams: { cart_id: cartId } },
+    z.object({ shipping_options: z.array(ShippingOptionSchema) }),
+  );
+  return data.shipping_options;
+}
+
+export async function addShippingMethod(
+  backendUrl: string,
+  publishableKey: string,
+  cartId: string,
+  optionId: string,
+): Promise<CartMutationResult> {
+  try {
+    const data = await fetchMedusaJson(
+      {
+        backendUrl,
+        path: `/store/carts/${cartId}/shipping-methods`,
+        authHeader: publishableKey,
+        method: "POST",
+        body: { option_id: optionId },
+      },
+      z.object({ cart: CartSchema }),
+    );
+    return { ok: true, cart: data.cart };
+  } catch (error) {
+    return { ok: false, reason: "shipping_failed", message: error instanceof Error ? error.message : "Unknown error" };
+  }
+}
+
+export async function listPaymentProviders(
+  backendUrl: string,
+  publishableKey: string,
+  regionId: string,
+): Promise<StorePaymentProvider[]> {
+  const data = await fetchMedusaJson(
+    { backendUrl, path: "/store/payment-providers", authHeader: publishableKey, searchParams: { region_id: regionId } },
+    z.object({ payment_providers: z.array(PaymentProviderSchema) }),
+  );
+  return data.payment_providers;
+}
+
+export type PaymentCollectionResult =
+  | { ok: true; paymentCollection: StorePaymentCollection }
+  | { ok: false; message: string };
+
+export async function createPaymentCollection(
+  backendUrl: string,
+  publishableKey: string,
+  cartId: string,
+): Promise<PaymentCollectionResult> {
+  try {
+    const data = await fetchMedusaJson(
+      { backendUrl, path: "/store/payment-collections", authHeader: publishableKey, method: "POST", body: { cart_id: cartId } },
+      z.object({ payment_collection: PaymentCollectionSchema }),
+    );
+    return { ok: true, paymentCollection: data.payment_collection };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Unknown error" };
+  }
+}
+
+export async function initPaymentSession(
+  backendUrl: string,
+  publishableKey: string,
+  paymentCollectionId: string,
+  providerId: string,
+): Promise<PaymentCollectionResult> {
+  try {
+    const data = await fetchMedusaJson(
+      {
+        backendUrl,
+        path: `/store/payment-collections/${paymentCollectionId}/payment-sessions`,
+        authHeader: publishableKey,
+        method: "POST",
+        body: { provider_id: providerId },
+      },
+      z.object({ payment_collection: PaymentCollectionSchema }),
+    );
+    return { ok: true, paymentCollection: data.payment_collection };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Unknown error" };
+  }
+}
+
+const OrderSchema = z.object({
+  id: z.string(),
+  display_id: z.number().nullable().optional(),
+  status: z.string(),
+  email: z.string().nullable().optional(),
+  currency_code: z.string(),
+  total: z.number().nullable().optional(),
+  item_total: z.number().nullable().optional(),
+  shipping_total: z.number().nullable().optional(),
+  tax_total: z.number().nullable().optional(),
+  payment_status: z.string().optional(),
+  fulfillment_status: z.string().optional(),
+  items: z
+    .array(
+      z.object({
+        id: z.string(),
+        title: z.string(),
+        quantity: z.number(),
+        thumbnail: z.string().nullable().optional(),
+        total: z.number().nullable().optional(),
+      }),
+    )
+    .default([]),
+  shipping_address: AddressSchema.nullable().optional(),
+});
+export type StoreOrder = z.infer<typeof OrderSchema>;
+
+/**
+ * Medusa's cart completion is idempotent at the Medusa level — verified
+ * directly: calling this twice on the same cart returns the SAME order
+ * both times, not a duplicate. That's the actual safety mechanism this
+ * relies on for double-click/retry protection; this function doesn't add
+ * a second one on top (an idempotency-key header alone wouldn't make
+ * every endpoint safe, and isn't needed here since Medusa already
+ * handles the one operation that matters).
+ */
+export type CompleteCartResult =
+  | { type: "order"; order: StoreOrder }
+  | { type: "cart_error"; message: string }
+  | { type: "request_error"; message: string };
+
+export async function completeCart(backendUrl: string, publishableKey: string, cartId: string): Promise<CompleteCartResult> {
+  try {
+    const data = await fetchMedusaJson(
+      { backendUrl, path: `/store/carts/${cartId}/complete`, authHeader: publishableKey, method: "POST" },
+      z.discriminatedUnion("type", [
+        z.object({ type: z.literal("order"), order: OrderSchema }),
+        z.object({ type: z.literal("cart"), cart: CartSchema, error: z.object({ message: z.string() }).optional() }),
+      ]),
+    );
+    if (data.type === "order") return { type: "order", order: data.order };
+    return { type: "cart_error", message: data.error?.message ?? "Payment was not completed." };
+  } catch (error) {
+    return { type: "request_error", message: error instanceof Error ? error.message : "Unknown error" };
+  }
+}
+
+export async function getStoreOrder(backendUrl: string, publishableKey: string, orderId: string): Promise<StoreOrder | null> {
+  try {
+    const data = await fetchMedusaJson(
+      { backendUrl, path: `/store/orders/${orderId}`, authHeader: publishableKey },
+      z.object({ order: OrderSchema }),
+    );
+    return data.order;
+  } catch (error) {
+    if (error instanceof MedusaRequestError && /returned 404/.test(error.message)) return null;
+    throw error;
   }
 }
 

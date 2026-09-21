@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { data, Form, useActionData, useLoaderData, useNavigation } from "react-router";
 import { resolveSiteIdByHost } from "~/lib/site-resolution.server";
-import { resolveStorefront, resolveCart, addStoreCartLineItem } from "~/lib/commerce.server";
+import { resolveStorefront, resolveCart, addStoreCartLineItem, parseValidQuantity } from "~/lib/commerce.server";
 import { formatMoney } from "~/lib/money";
 import { getStoreProductByHandle } from "~/lib/medusa.server";
 import type { Route } from "./+types/product-detail";
@@ -30,16 +30,26 @@ export async function action({ request, params }: Route.ActionArgs) {
 
   const formData = await request.formData();
   const variantId = String(formData.get("variant_id") ?? "");
-  const rawQuantity = Number(formData.get("quantity") ?? "1");
-  const quantity = Number.isFinite(rawQuantity) ? Math.min(Math.max(Math.floor(rawQuantity), 1), 99) : 1;
+  const quantity = parseValidQuantity(formData.get("quantity"));
 
   if (!variantId) return data({ error: "Choose an option first." }, { status: 400 });
+  if (quantity === null) return data({ error: "Enter a whole number quantity between 1 and 99." }, { status: 400 });
 
-  const { cart, setCookieHeader } = await resolveCart(request, storefront);
+  // Confirm the submitted variant actually belongs to THIS product —
+  // reject identifier manipulation (a variant ID from a different
+  // product) before it ever reaches Medusa's cart.
+  const product = await getStoreProductByHandle(storefront.backendUrl, storefront.publishableKey, params.handle!, storefront.region.id);
+  if (!product || !product.variants.some((v) => v.id === variantId)) {
+    return data({ error: "That option isn't valid for this product." }, { status: 400 });
+  }
+
+  const cartResult = await resolveCart(request, storefront);
+  if (cartResult.status === "unavailable") return data({ error: cartResult.message }, { status: 503 });
+  const cart = cartResult.cart;
   const result = await addStoreCartLineItem(storefront.backendUrl, storefront.publishableKey, cart.id, variantId, quantity);
 
   const headers = new Headers();
-  if (setCookieHeader) headers.set("Set-Cookie", setCookieHeader);
+  if (cartResult.setCookieHeader) headers.set("Set-Cookie", cartResult.setCookieHeader);
 
   if (!result.ok) {
     // Medusa's own message (e.g. "insufficient_inventory") — shown

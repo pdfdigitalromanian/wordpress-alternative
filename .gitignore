@@ -21,6 +21,11 @@ build/
 supabase/.branches/
 supabase/.temp/
 
+# Playwright
+/apps/web/test-results/
+/apps/web/playwright-report/
+/apps/web/playwright/.cache/
+
 # IDE
 .vscode/*
 !.vscode/extensions.json

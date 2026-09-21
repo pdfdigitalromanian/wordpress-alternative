@@ -1,188 +1,250 @@
 # Progress
 
-Last updated: 2026-09-20, end of the session that implemented the
-storefront/cart phase (commit `14b79f4`, on top of the security-fix
-commit `1761598` and the pre-existing `b5ded70`). This file is the
-current source of truth for what's actually built — `docs/implementation-
-plan.md`'s milestone numbering is kept for traceability to the original
-requirements, not as the authoritative sequence.
+Last updated: 2026-09-21, end of the session that implemented guest
+checkout + real-browser verification (this session, on top of the
+storefront/cart commit `14b79f4`, the security-fix commit `1761598`, and
+the pre-existing `b5ded70`). This file is the current source of truth for
+what's actually built — `docs/implementation-plan.md`'s milestone
+numbering is kept for traceability to the original requirements, not as
+the authoritative sequence.
 
 ## What actually works right now
 
 Verified live against the hosted Supabase project (`nsfcmwlbippjjlpvjoyd`)
-and a local Medusa v2 instance (`http://localhost:9000`), not just typed
-or read.
+and a local Medusa v2 instance (`http://localhost:9000`) — and, new this
+session, verified through a **real browser** via Playwright, not just
+curl/typecheck/unit tests.
 
-**CMS core (M0-M2):**
-- Sign in (`/login`, no public sign-up), workspace/site ownership with
-  RLS-enforced cross-workspace isolation (`pnpm test:rls`, 9/9).
-- Visual editor (`/admin/sites/:id/pages/:id`, Puck) with autosave,
-  optimistic-concurrency conflict detection, server-side document
-  validation (component type/prop allowlist/size cap, 10/10 tests), and
-  a real publish flow (immutable releases, atomic pointer, rollback;
-  `pnpm test:publish`, 18/18, caught and fixed a real PL/pgSQL NULL-
-  handling bug where a non-member could call the publish/rollback RPCs).
-- Public rendering (`routes/site-page.tsx`) resolves host → site →
-  published release → page-by-path, server-renders real content, 404s
-  any unregistered host.
+**CMS core (M0-M2):** unchanged from the previous session — see git
+history — still passing (`pnpm test:rls` 10/10, `pnpm test:publish`
+18/18).
 
-**Commerce (this session, M3-reprioritized):**
-- `/admin/sites/:id/store`: encrypted Medusa connection (AES-256-GCM),
-  masked-key display, connection test with 4 distinct honest failure
-  reasons, product list from the Admin API.
-- Public storefront: `/shop`, `/products/:handle`, `/cart` — real
-  product data and Medusa-computed totals via the Store API
-  (publishable key only, never the Admin secret). Full cart lifecycle
-  (add/update/remove/persist-across-reload/session-isolation) verified
-  through the actual routes. Insufficient-inventory rejection verified
-  by temporarily setting real stock to 1 via the Admin API and
-  confirming the honest rejection, then restoring it.
-- `ProductGrid` Puck component: real products render server-side on a
-  published page (`/featured` in the seeded data — real images, EUR
-  10.00 formatted correctly, working product links). Confirmed prices
-  are resolved fresh per request from Medusa, not frozen into the CMS
-  release, so publishing/rolling back a layout never touches commerce
-  state in either direction.
-- SSRF guard on the Medusa backend-URL field: operator allowlist,
-  production-gated localhost exception, DNS-rebinding-resistant (pins
-  the connection to a once-validated IP), 9 regression tests — one of
-  which caught a real bug (see below) before it shipped.
+**Commerce, hardened (this session, work order reviewing `62fd000`):**
+- **Public product API** (`api.storefront-products.tsx`) now resolves
+  the site strictly from the verified hostname mapping
+  (`resolveSiteIdByHost`); an arbitrary `?siteId=` can no longer select a
+  different site's data — a mismatched query param gets the same
+  "Unknown site" 404 as a bogus one, so it can't be used to probe which
+  site IDs exist.
+- **New staff-only preview endpoint** (`api.preview-storefront-products.tsx`)
+  for editing sites that don't (yet) have a public domain — requires a
+  real Supabase session and confirms workspace access via the normal
+  RLS-backed `sites` select, no hand-rolled permission logic. The Puck
+  component registry picks between the public and preview endpoint via
+  a `mode: "preview" | "public"` field on `StorefrontMetadata`, decided
+  server-side by which route is rendering.
+- **Cart session** now requires a real, non-placeholder `SESSION_SECRET`
+  (rejects `changeme`/`secret`/`placeholder`/`test`/`example`/`xxx`-like
+  values at startup rather than silently issuing an unsigned cookie), and
+  the signed cookie payload is bound to site + commerce-connection
+  fingerprint + region, not just the cookie name — so a stale cart from a
+  since-changed backend/region/key is detected and discarded rather than
+  reused against the wrong store. GET requests (`peekCart`) no longer
+  create a cart merely by loading `/cart`; only a real mutation
+  (`resolveCart`) creates one. Quantities are validated as strict
+  integers in `[1, 99]`; line-item mutations verify the item actually
+  belongs to the cart first.
+- **Region readiness**: `resolveStorefront()` now prefers a per-site
+  `commerce_connections.default_region_id` when set, falling back to the
+  first region otherwise — an explicit single-region configuration
+  (multi-region selection UI is still out of scope, named below), set
+  from a new "Store setup" region `<select>` in `/admin/sites/:id/store`.
+- **Editor document validator** rewritten from reject-unknown-props to
+  **strip-unknown-props**: builds a sanitized authoring projection
+  (recognized fields only, per component, including nested slots) before
+  persisting, instead of either accepting arbitrary render props or
+  rejecting the whole save. This was required, not cosmetic — see bug #4
+  below.
+- **Editor save/navigation**: autosave requests now queue (a publish
+  requested while an autosave is in flight is queued and sent after,
+  never dropped or racing it), and "back" navigation flushes any pending
+  edit and waits for a confirmed save before calling `navigate()`,
+  instead of firing-and-forgetting.
+- **"Open Medusa Admin" link** added to `/admin/sites/:id/store` —
+  opens the connection's already-configured `backend_url` + `/app` in a
+  new tab, explicitly labeled as separate authentication (not SSO, no
+  credentials in the URL, no iframe).
+- **Guest checkout** (`/checkout`, `/checkout/confirmation`, new routes):
+  address collection with server-side country validation against the
+  region's allowed countries → real Medusa shipping options (chosen
+  option's price always re-read from Medusa, never trusted from the
+  submitted form) → payment. Two payment paths, reported separately per
+  the work order's instruction:
+  - **Manual/system-default test order** (Medusa's built-in
+    `pp_system_default` provider): creates a payment collection, inits a
+    payment session, then completes the cart via Medusa's own
+    `/store/carts/:id/complete` — **verified end-to-end**, including a
+    real order visible in native Medusa Admin (display_id 3).
+  - **Stripe (test mode)**: `@medusajs/payment-stripe` +
+    `@medusajs/payment` installed and conditionally registered in
+    `medusa-config.ts` (only if `STRIPE_API_KEY` is set), with
+    `STRIPE_API_KEY`/`STRIPE_WEBHOOK_SECRET` documented in
+    `apps/medusa/.env.template`. **Not verified** — no test credentials
+    are available in this environment. Nothing Stripe-specific (Elements
+    mounting, webhook signature verification, capture-vs-authorize) has
+    been exercised. This is explicitly *not* presented as a verified
+    Stripe payment.
+  - Order confirmation is reachable **only** via a signed,
+    site-scoped, 24h-expiry `drcms_order_<siteId>` cookie set at
+    checkout completion — there is no order ID in the confirmation URL.
+    Confirmed by direct curl that Medusa's raw `/store/orders/:id`
+    accepts *any* order ID with just the publishable key (no per-order
+    auth), so this cookie is the actual access boundary, not a
+    convenience.
+- Cart/checkout/confirmation/preview routes now send
+  `Cache-Control: private, no-store`.
 
-## Bugs found and fixed this session (by tests, not just review)
+## Real-browser verification (new this session)
 
-1. **`workspaces_select` RLS timing bug** (M1): a brand-new workspace's
-   creator couldn't see their own `INSERT ... RETURNING` row, because
-   the SELECT policy depended on an `AFTER INSERT` trigger's membership
-   row, and Postgres fires `AFTER ROW` triggers after the `RETURNING`
-   projection is computed. Fixed by also allowing `created_by =
-   auth.uid()` directly.
-2. **`publish_site`/`rollback_site` NULL-role bypass** (M2): a complete
-   outsider (no workspace membership at all) could call either RPC,
-   because `workspace_role_of()` returns `NULL` for a non-member and
-   PL/pgSQL's `IF NULL THEN raise` silently evaluates as false. Fixed
-   with an explicit NULL check. Caught by `supabase/tests/publish-
-   rollback.mjs`.
-3. **SSRF guard private-IP-in-dev bypass** (this session): the "allow
-   localhost in development" exception was re-derived from "is this IP
-   private" instead of the literal hostname, so it wrongly admitted
-   *any* RFC1918 address (e.g. `192.168.1.1`) in development, not just
-   `localhost`. Fixed by computing the exception once from the hostname
-   string and reusing it. Caught by `apps/web/app/lib/medusa.server.test.ts`.
+Previous sessions were blocked on "no browser-automation tool is
+available" (checked via `ToolSearch` only). This session re-checked by
+inspecting the actual environment/dependencies directly instead of
+relying on that absence, found `@playwright/test` installable and
+Chromium launchable, and used it for real: `apps/web/playwright.config.ts`
+(desktop 1600×1000 + mobile Pixel 7 projects, screenshots/traces on
+failure only, artifacts gitignored), `apps/web/e2e/storefront-checkout.spec.ts`
+(4 tests) and `apps/web/e2e/editor.spec.ts` (2 tests, desktop-only — Puck's
+editor chrome isn't built for mobile viewports, same as any comparable
+page builder, so it's excluded via `testIgnore` rather than forced).
 
-The pattern across all three: something that looked locally correct
-(one policy, one branch) was wrong about a *global* property (row
-visibility timing, NULL propagation, exception scope). Worth specifically
-re-testing this class of bug in future security-relevant work here,
-not just reviewing the diff.
+```
+pnpm --filter @digital-romanian/web exec playwright test
+10 passed (33.9s)
+```
+covering: real SSR product content (not client-fetched), unknown-host/
+unknown-product 404s, the full flow browse → variant → add to cart →
+persistent cart → checkout → manual test order → confirmation,
+confirmation rejecting access without the order-access cookie, the
+editor's live preview rendering real resolved products, an actual
+inspector-field edit autosaving without the resolved-data-stripping bug,
+and back-navigation correctly waiting for a pending save.
 
-## Credential rotation (this session)
+**Four bugs were found only by this real-browser pass** (none would have
+been caught by typecheck, unit tests, or curl):
+1. `ShippingMethodSchema` required `name` as a plain string, but a cart's
+   own `shipping_methods[]` entries never include `name` (only the
+   separate `/store/shipping-options` listing does) — every real
+   `addShippingMethod` call failed zod validation. Fixed by making `name`
+   nullable/optional.
+2. The manual-order completion path called `completeCart` without first
+   creating a payment collection and initializing a payment session —
+   Medusa rejected with "Payment collection has not been initiated for
+   cart". Fixed by adding those two steps first.
+3. Checkout's completion action returned a JSON `redirectTo` field the UI
+   never acted on, so clicking "place order" silently did nothing.
+   Fixed by using a real `redirect()` to `/checkout/confirmation`.
+4. The editor canvas rendered at ~48–288px wide — unusable. Root-caused
+   via `page.evaluate` reading computed styles: Puck's own fixed 4-column
+   layout needs 750px+ for its panels alone, but the parent admin
+   layout's `.admin-shell` (`max-w-3xl` = 768px, meant for ordinary forms)
+   left almost nothing for the canvas. Fixed by making the editor route's
+   root render `position: fixed; inset: 0`, breaking out of that wrapper
+   (canvas width confirmed via `boundingBox()`: 288px → 844px).
 
-The local Medusa admin password and a Medusa secret API key appeared in
-this session's terminal output (visible in the transcript). Both were
-rotated:
-- Local Medusa admin user (`grandsam.s2018@gmail.com`): auth identity
-  deleted and recreated with a fresh password (`npx medusa user`, plus
-  direct `auth_identity`/`user_rbac_role` cleanup since the CLI can't
-  update an existing user's password — confirmed old password no longer
-  works, new one does). Value is in `.medusa-admin-credentials.local`
-  (gitignored, `chmod 600`), never displayed in chat.
-- Medusa secret API key: old key revoked via `/admin/api-keys/:id/revoke`
-  (confirmed: old key → 401, new key → 200), new one generated and saved
-  to `.medusa-secret-key.local` (gitignored, `chmod 600`), and the CMS's
-  stored `commerce_connections` row updated to the new key (confirmed
-  "connected" status afterward).
-- Git history checked (`git log --all -p | grep <old values>`): clean,
-  neither value was ever committed.
+Also, separately, the real Puck autosave payload was captured and found
+to include `resolvedProducts`/`resolvedCurrency`/`resolvedError` merged
+into `ProductGrid`'s props — the previous validator's reject-unknown-prop
+behavior returned 400 on every real autosave of a page containing a
+ProductGrid. This is what motivated the strip-rather-than-reject
+validator rewrite above (found and confirmed via this same browser pass,
+not assumed from reading the code).
 
-This is a local-only Medusa instance not reachable from outside this
-machine, so the exposure risk was low, but rotation was still done per
-the explicit instruction rather than judged unnecessary.
+## Bugs found and fixed in earlier sessions
+
+See prior revisions of this file / commit history for the RLS timing bug,
+the `publish_site`/`rollback_site` NULL-role bypass, and the SSRF
+private-IP-in-dev bypass — all still fixed, regression-tested, unaffected
+by this session's changes.
+
+## Credential rotation
+
+No new credential exposure this session. See commit history for the
+Medusa admin password / secret API key rotation from the previous
+session (still valid, not re-rotated without cause).
 
 ## Known gaps / deliberate simplifications (not hidden)
 
-- **Region selection**: `resolveStorefront()` takes the first Medusa
-  region unconditionally. Correct for the single-region store this was
-  tested against; a multi-region store would show every product in that
-  one region's currency until per-site region/currency configuration is
-  built (Part B §22).
+- **Stripe test-mode payment**: installed and wired, not verified — no
+  test credentials in this environment (see above). Next session should
+  either obtain `STRIPE_API_KEY`/`STRIPE_WEBHOOK_SECRET` (test mode) or
+  explicitly decide to ship with the manual/system-default provider only.
+- **Multi-region stores**: only the single-`default_region_id` path is
+  built and tested. A store with multiple regions will still work (falls
+  back to the first region if unset) but per-region currency/shipping
+  selection in the storefront UI itself is not built.
+- **"Open Medusa Admin" link**: exists and points at the right URL, but
+  wasn't click-tested in a browser session this round (no admin user
+  session was driven through Playwright for it).
 - **ProductGrid category/collection field** is a plain text ID input,
   not a picker UI.
 - **Domain "verification"** in `/admin` (`site.tsx`/`site_domains`) is an
-  explicit manual flag, not real DNS record checking — labeled as such
-  in the UI, not silently pretending to be real.
-- **Store admin parity**: only Setup/status and Products exist. Inventory,
-  orders, customers, promotions, shipping/regions, presentation are
-  deferred per Part B §19's explicit interim-delivery decision — "Open
-  Medusa Admin" link for those isn't built yet either (next executable
-  action below).
-- **Node v24** vs. Medusa's documented `^20.19.0 || >=22.12.0` range:
-  unverified upstream, has worked in every command run so far. Not
-  changed, per standing user instruction not to manage Node versions.
+  explicit manual flag, not real DNS record checking — labeled as such.
+- **Store admin parity**: only Setup/status, Products, and now the
+  Medusa Admin link exist. Inventory, orders, customers, promotions,
+  shipping/regions, presentation screens are still deferred (Part B §19's
+  explicit interim-delivery decision).
 - **No production deploy target** chosen for `apps/medusa` yet (needs a
-  persistent Node host, not Vercel — see `docs/architecture.md`).
+  persistent Node host, not Vercel — see `docs/architecture.md`). Nothing
+  has been provisioned or deployed this session.
+- **Cross-site cart/connection isolation** with two live sites is still
+  not empirically tested with two real sites (structurally guaranteed by
+  two independent mechanisms — site-scoped cookie name + host-only
+  cookie + distinct verified hostname per site — same reasoning as
+  before, still not re-verified with a second live site).
 
-## Verification NOT done (named, not silently skipped)
+## Verification categories — stated separately, per the work order
 
-**No browser-automation tool is available in this environment** (checked
-via `ToolSearch` — no `mcp__Claude_Browser__*` / `mcp__claude-in-chrome__*`
-/ computer-use tools were present). Everything above was verified via:
-direct HTTP requests (curl) against the running dev server reproducing
-exact user flows (login → create → autosave → publish → view), direct
-inspection of server-rendered HTML for real content, `pnpm typecheck`,
-and real automated test suites (`pnpm test` in `apps/web`, `pnpm
-test:rls`, `pnpm test:publish` at the repo root).
+- **Manual order verified**: yes. A real guest checkout using Medusa's
+  built-in system-default payment provider produced a real order,
+  confirmed visible in native Medusa Admin (display_id 3).
+- **Provider (Stripe) test payment verified**: no. Not implemented beyond
+  installing/registering the module — no test credentials available.
+- **Browser flow verified**: yes, via Playwright against a real Chromium
+  browser (not curl) — 10/10 tests passing across desktop + mobile
+  (storefront) and desktop (editor). See bugs #1-4 above, all only
+  found this way.
+- **Deployed environment verified**: no. Everything above is against
+  local dev (Medusa on `localhost:9000`) and the hosted Supabase project;
+  nothing has been deployed to a staging or production host this session.
 
-**Also not empirically tested**: cross-*site* cart/connection isolation
-with two live sites (only cross-*session* isolation on one site was
-tested — two cookie jars against the same site correctly get separate
-carts). Cross-site isolation is structurally guaranteed by two
-independent mechanisms rather than by careful code review alone: the
-cart cookie is both site-scoped by name (`drcms_cart_${siteId}`) *and*
-never carries a `Domain` attribute (host-only, browser-enforced
-per-origin), and each site requires its own distinct verified hostname
-to be reachable at all (`site_domains`). Setting up a second full
-site+domain+Medusa-connection to empirically confirm this was judged not
-worth the time given it's guaranteed by construction on two independent
-axes — flagged here rather than silently assumed, so it can be revisited
-if that reasoning turns out to be wrong.
-
-**Not verified**: actual browser interaction — dragging a Puck component
-onto the canvas, clicking through the variant selector, mobile viewport
-rendering, keyboard-only navigation, screen-reader behavior. The server-
-side contracts these interactions call (autosave, add-to-cart, etc.) are
-verified; the client-side interaction layer itself (React state, Puck's
-internal drag-and-drop, focus management) is not. This is the same
-blocked verification named in the previous session and remains blocked
-for the same reason.
+None of these four is being used as proof of another.
 
 ## Next executable action
 
-In priority order, matching the corrected M3→M6 sequence in
-`docs/implementation-plan.md`:
+In priority order:
 
-1. **Guest checkout (M5)**: region/address/shipping selection, a test-mode
-   payment provider (Stripe, after checking `apps/medusa`'s installed
-   dependencies for compatibility — not yet checked), webhook signature
-   verification, order confirmation, and confirming the resulting order
-   is visible in native Medusa Admin.
-2. Or, if commerce depth matters more right now than checkout: an
-   **"Open Medusa Admin" link** from `/admin/sites/:id/store` (Part B §19
-   explicitly wants this as the interim path to inventory/orders/
-   customers/promotions/shipping, ahead of rebuilding those screens) —
-   this is small and immediately useful regardless of which path is
-   chosen next.
-3. Either way: a real browser pass over the editor and storefront once a
-   browser-automation tool is available, to close the verification gap
-   named above.
+1. **Stripe test-mode payment**: obtain test credentials
+   (`sk_test_...`/`whsec_...`), verify the module activates, implement
+   the Elements-based client flow (provider-hosted fields, no raw card
+   data through the CMS), verify the webhook route with real signature
+   verification, and test double-click/retry/webhook-race scenarios
+   before calling it verified.
+2. **Deployment staging gate** (separate from and after the above):
+   provision an independently-hosted Medusa instance (server/worker
+   split, managed PostgreSQL/Redis/file storage), configure CORS for the
+   real deployed CMS origin, re-run this session's Playwright suite
+   against that staging environment, and only then consider a Vercel
+   deploy of `apps/web` pointed at it. Nothing here should be
+   provisioned without a separate, explicit go-ahead — this is a new
+   category of action (hosted infrastructure, not a local dev change).
+3. Multi-region storefront UI (currency/region switching), if/when a
+   multi-region store is actually needed.
 
 ## Environment / safety notes for future sessions
 
 - CMS development is against the **hosted** Supabase project directly —
   there's no local Postgres for it (see `docs/architecture.md`). Every
-  migration so far has been additive; no `supabase db reset` has been run
-  against it. Continue that discipline; ask before anything destructive.
+  migration so far (including this session's additive
+  `default_region_id` column) has been additive; no `supabase db reset`
+  has been run against it. Continue that discipline; ask before anything
+  destructive.
 - Local Medusa Postgres/Redis are native Homebrew services (no Docker,
   confirmed permanent).
-- `apps/web/.env.local` and the various `.*.local` credential files are
-  gitignored — verified via `git check-ignore` after every credential
-  operation this session, not assumed.
+- `apps/web/.env.local`, `.*.local` credential files, and Playwright's
+  `test-results/`/`playwright-report/`/`playwright/.cache/` output are
+  all gitignored.
+- Playwright + Chromium are confirmed working in this environment (see
+  `CLAUDE.md`) — do not report browser verification as blocked without
+  first checking directly (`npx playwright install` /
+  `pnpm exec playwright test`), regardless of what a tool search for a
+  browser-automation MCP connector returns.
