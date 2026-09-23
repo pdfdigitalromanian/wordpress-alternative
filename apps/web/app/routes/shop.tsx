@@ -50,7 +50,7 @@ export default function Shop() {
 
   if (!data.ready) {
     return (
-      <main>
+      <main className="storefront-page">
         <h1>Shop</h1>
         <p role="status">This store isn't set up for browsing yet: {data.message}</p>
       </main>
@@ -61,7 +61,7 @@ export default function Shop() {
   const hasPrev = data.offset > 0;
 
   return (
-    <main aria-busy={loading}>
+    <main className="storefront-page" aria-busy={loading}>
       <h1>Shop</h1>
       {data.products.length === 0 ? (
         <p>No products are available right now.</p>

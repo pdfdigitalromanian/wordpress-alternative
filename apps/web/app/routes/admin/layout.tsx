@@ -1,4 +1,4 @@
-import { Form, Outlet, redirect, useLoaderData } from "react-router";
+import { Form, Link, NavLink, Outlet, redirect, useLoaderData, useMatches, useParams } from "react-router";
 import { createSupabaseServerClient } from "~/lib/supabase.server";
 import type { Route } from "./+types/layout";
 
@@ -8,32 +8,34 @@ export async function loader({ request }: Route.LoaderArgs) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) throw redirect("/login");
+  if (!user) throw redirect(`/login?returnTo=${encodeURIComponent(new URL(request.url).pathname)}`);
 
   return { email: user.email };
 }
 
-// This is the CMS admin shell — visually distinct from the public site
-// theme (Part A SS2). Only the Overview area exists so far; the other
-// admin areas (Pages, Posts, Collections, ...) arrive with the
-// milestones that give them real data.
 export default function AdminLayout() {
   const { email } = useLoaderData<typeof loader>();
 
+  const { siteId, pageId } = useParams();
+  const matches = useMatches();
+  const site = matches.map((match) => (match.loaderData as { site?: { name: string } } | undefined)?.site).find(Boolean);
+  const base = siteId ? `/admin/sites/${siteId}` : "/admin";
+  if (pageId) return <Outlet />;
+
   return (
     <div className="admin-shell">
-      <header className="admin-header">
-        <strong className="text-lg font-semibold">Digital Romanian CMS — Admin</strong>
-        <div className="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400">
-          <span>{email}</span>
-          <Form method="post" action="/logout">
-            <button type="submit" className="btn-secondary">
-              Sign out
-            </button>
-          </Form>
-        </div>
-      </header>
-      <Outlet />
+      <a className="skip-link" href="#main-content">Skip to content</a>
+      <aside className="admin-sidebar">
+        <Link to="/admin" className="brand"><span className="brand-mark">D</span><span>Digital Romanian<span className="brand-caption">Site administration</span></span></Link>
+        <Link to="/admin" className="site-switcher"><span className="site-monogram">{site?.name?.slice(0, 2).toUpperCase() || "WS"}</span><span>{site?.name || "Your workspace"}<small>Switch site ↕</small></span></Link>
+        <div className="nav-label">WORKSPACE</div>
+        <nav className="admin-nav" aria-label="Administration">
+          <NavLink to={base} end><span aria-hidden="true">▦</span>{siteId ? "Overview" : "All sites"}</NavLink>
+          {siteId ? <><Link to={`${base}#pages`}><span aria-hidden="true">▤</span>Website</Link><NavLink to={`${base}/store`}><span aria-hidden="true">▱</span>Store</NavLink><Link to={`${base}#publishing`}><span aria-hidden="true">↗</span>Publishing</Link></> : null}
+        </nav>
+        <div className="sidebar-bottom"><span className="account-avatar">{email?.slice(0, 1).toUpperCase()}</span><div className="account-details"><span>{email}</span><Form method="post" action="/logout"><button type="submit">Sign out ↗</button></Form></div></div>
+      </aside>
+      <div className="admin-body"><header className="admin-topbar"><span className="scope-label">{site?.name || "Workspace"}<span>/</span><strong>Administration</strong></span><span className="badge">Staff workspace</span></header><div id="main-content" className="admin-content"><Outlet /></div><footer className="admin-footer">Digital Romanian <span>Make it yours.</span></footer></div>
     </div>
   );
 }

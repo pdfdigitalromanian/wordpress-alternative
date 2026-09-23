@@ -49,7 +49,7 @@ export default function CheckoutConfirmation() {
 
   if (!loaderData.ready) {
     return (
-      <main>
+      <main className="storefront-page">
         <h1>Order confirmation</h1>
         <p role="status">{loaderData.message}</p>
       </main>
@@ -58,7 +58,7 @@ export default function CheckoutConfirmation() {
 
   if (!loaderData.authorized) {
     return (
-      <main>
+      <main className="storefront-page">
         <h1>Order confirmation</h1>
         <p role="alert">
           No order found for this session. <Link to="/shop">Continue shopping</Link>
@@ -71,7 +71,7 @@ export default function CheckoutConfirmation() {
   const isManualTestOrder = order.payment_status !== "captured";
 
   return (
-    <main>
+    <main className="storefront-page">
       <h1>Order confirmed</h1>
       {isManualTestOrder ? (
         <p role="status">

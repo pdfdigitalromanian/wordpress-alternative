@@ -84,15 +84,7 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   if (intent === "verify-domain") {
-    const domainId = String(formData.get("domain_id") ?? "");
-    if (!domainId) return { intent, error: "Missing domain." };
-
-    const { error } = await supabase
-      .from("site_domains")
-      .update({ verified_at: new Date().toISOString() })
-      .eq("id", domainId);
-    if (error) return { intent, error: error.message };
-    return { intent, success: true };
+    return { intent, error: "Domain verification requires a DNS check by your administrator." };
   }
 
   return { intent, error: "Unknown action." };
@@ -106,7 +98,7 @@ export default function AdminOverview() {
 
   return (
     <main>
-      <h1 className="mb-6 text-2xl font-semibold">Overview</h1>
+      <div className="page-heading"><div><span className="eyebrow">A PLACE FOR EVERY IDEA</span><h1>Your websites</h1><p className="muted">Build something new. Pick up where you left off.</p></div><a href="#create-workspace" className="btn">＋ Create workspace</a></div>
 
       <section>
         <h2 className="mb-3 text-lg font-medium">Your workspaces</h2>
@@ -145,13 +137,7 @@ export default function AdminOverview() {
                         ) : (
                           <>
                             <span className="text-amber-700 dark:text-amber-400">— not verified</span>
-                            <Form method="post" action="?index" className="inline">
-                              <input type="hidden" name="intent" value="verify-domain" />
-                              <input type="hidden" name="domain_id" value={domain.id} />
-                              <button type="submit" disabled={submitting} className="btn-secondary">
-                                Mark verified (manual — no DNS check yet)
-                              </button>
-                            </Form>
+                            <span className="text-xs text-gray-500">Ask your administrator to verify DNS.</span>
                           </>
                         )}
                       </li>
@@ -162,10 +148,8 @@ export default function AdminOverview() {
                     <input type="hidden" name="intent" value="add-domain" />
                     <input type="hidden" name="site_id" value={site.id} />
                     <div className="field mb-0 flex-1">
-                      <label>
-                        Add domain (e.g. <code>localhost</code>, or your production hostname)
-                      </label>
-                      <input name="hostname" type="text" required placeholder="localhost" className="input" />
+                      <label htmlFor={`domain-${site.id}`}>Add domain</label>
+                      <input id={`domain-${site.id}`} name="hostname" type="text" required placeholder="localhost" className="input" />
                     </div>
                     <button type="submit" disabled={submitting} className="btn-secondary">
                       Add domain
@@ -179,18 +163,18 @@ export default function AdminOverview() {
               <input type="hidden" name="intent" value="create-site" />
               <input type="hidden" name="workspace_id" value={workspace.id} />
               <div className="field mb-0 flex-1">
-                <label>New site name</label>
-                <input name="name" type="text" required className="input" />
+                <label htmlFor={`site-${workspace.id}`}>New blank site name</label>
+                <input id={`site-${workspace.id}`} name="name" type="text" required className="input" />
               </div>
               <button type="submit" disabled={submitting} className="btn-secondary">
-                Add site
+                Create blank site
               </button>
             </Form>
           </div>
         ))}
       </section>
 
-      <section className="card">
+      <section className="card" id="create-workspace">
         <h2 className="mb-3 text-lg font-medium">Create a workspace</h2>
         {/* Nested index routes need the `?index` marker so the form
             posts to this route's action rather than the parent layout's

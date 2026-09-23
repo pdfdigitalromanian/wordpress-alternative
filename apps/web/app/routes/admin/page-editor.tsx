@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useFetcher, useLoaderData, useNavigate } from "react-router";
-import { Puck, type Data } from "@puckeditor/core";
+import { Puck, legacySideBarPlugin, usePuck, type Data } from "@puckeditor/core";
 import "@puckeditor/core/puck.css";
 import { componentConfig, type StorefrontMetadata } from "~/lib/component-registry/config";
 import { validatePuckDocument } from "~/lib/component-registry/validate.server";
@@ -116,6 +116,17 @@ const AUTOSAVE_DEBOUNCE_MS = 800;
 
 type SaveStatus = "idle" | "saving" | "saved" | "conflict" | "error" | "publishing" | "published";
 
+const editorPlugins = [legacySideBarPlugin({ componentsLabel: "Add element", outlineLabel: "Layers" })];
+
+function EditorPreview({ children }: { children: ReactNode }) {
+  const { appState, dispatch } = usePuck();
+  return <div className="editor-preview-surface">{children}{appState.data.content.length === 0 ? <div className="editor-empty"><div className="editor-empty-symbol" aria-hidden="true">▧</div><h2>Start building your page</h2><p>Add elements from the left panel, or start with a heading.</p><button className="btn" onClick={() => dispatch({ type: "insert", componentType: "Heading", destinationIndex: 0, destinationZone: "root:default-zone" })}>Add heading</button></div> : null}</div>;
+}
+const editorOverrides = {
+  headerActions: () => <span className="muted text-sm">Changes save as a private draft</span>,
+  preview: EditorPreview,
+};
+
 export default function PageEditor() {
   const { page, storefrontMetadata } = useLoaderData<typeof loader>();
   const fetcher = useFetcher();
@@ -125,7 +136,7 @@ export default function PageEditor() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const knownUpdatedAtRef = useRef(page.draft_updated_at);
-  const latestDataRef = useRef<Data | null>(null);
+  const latestDataRef = useRef<Data | null>(page.draft_document as Data);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Distinct from "is a debounce timer pending" — this is "does the
   // server not yet have the latest edit", true from the moment
@@ -269,23 +280,14 @@ export default function PageEditor() {
   }, []);
 
   return (
-    // Fixed/full-viewport, breaking out of the parent admin layout's
-    // `.admin-shell` max-width (768px, meant for ordinary admin forms/
-    // lists) — Puck's own 4-column layout (icon rail + blocks panel +
-    // canvas + fields panel, ~68+320+48+320px before the canvas even
-    // gets space) needs full viewport width. Confirmed via a real
-    // browser: without this, the canvas rendered at ~48px wide, making
-    // the editor unusable. This route already has its own header
-    // (below) that duplicates admin/layout.tsx's, by design — the
-    // editor is meant to be an immersive full-screen tool, same as
-    // Puck's own reference usage.
-    <div style={{ position: "fixed", inset: 0, zIndex: 50, background: "white", display: "flex", flexDirection: "column" }}>
-      <div className="flex items-center justify-between border-b border-gray-200 px-4 py-2 text-sm dark:border-gray-800">
+    <div className="visual-editor" style={{ position: "fixed", inset: 0, zIndex: 50, background: "white", display: "flex", flexDirection: "column" }}>
+      <div className="editor-topbar">
         <a href={`/admin/sites/${page.site_id}`} className="hover:underline" onClick={handleBackClick}>
-          ← {page.title}
+          <span className="brand-mark">D</span> <strong>Digital Romanian</strong><span className="editor-page-title"> / {page.title}</span>
         </a>
         <div className="flex items-center gap-3">
-          <span className="text-gray-600 dark:text-gray-400">
+          <span role="status" className="editor-status">
+            {status === "idle" && "● Saved draft"}
             {status === "saving" && "Saving…"}
             {status === "saved" && "Draft saved"}
             {status === "conflict" && statusMessage}
@@ -302,7 +304,7 @@ export default function PageEditor() {
               // current draft), not just this one — same as the site
               // page's Publish button. Flush this page's own pending
               // edit first so it's included.
-              flush("publish");
+              if (window.confirm("Publish all page drafts in this site? This updates the live website, including changes on other pages.")) flush("publish");
             }}
           >
             Publish site
@@ -312,21 +314,14 @@ export default function PageEditor() {
       <div style={{ flex: 1, minHeight: 0, width: "100%", minWidth: 0 }}>
         {mounted ? (
           <Puck
+            headerTitle={page.title}
+            overrides={editorOverrides}
+            plugins={editorPlugins}
             config={componentConfig}
             data={page.draft_document as Data}
             metadata={storefrontMetadata}
             onChange={handleChange}
-            // Puck's own header renders a "Publish" button regardless of
-            // whether this prop is supplied (verified: the click handler
-            // is only a no-op — `onPublish && onPublish(data)` — when
-            // this is omitted, but the button itself isn't conditionally
-            // hidden). Wiring it to the same real flush+publish flow as
-            // the status-bar button below means whichever one a user
-            // clicks does the real thing — never an apparent no-op.
-            onPublish={(data) => {
-              latestDataRef.current = data;
-              flush("publish");
-            }}
+
           />
         ) : (
           <p className="p-4 text-sm text-gray-600 dark:text-gray-400">Loading editor…</p>

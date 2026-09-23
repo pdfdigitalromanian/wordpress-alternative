@@ -41,7 +41,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     .select("hostname, verified_at")
     .eq("site_id", siteId);
 
-  return { site, pages: pages ?? [], releases: releases ?? [], domains: domains ?? [] };
+  const currentUrl = new URL(request.url);
+  const liveDomain = domains?.find((domain) => domain.verified_at);
+  const liveUrl = liveDomain ? (["localhost", "127.0.0.1", "[::1]"].includes(liveDomain.hostname) ? `${currentUrl.origin}/?view=live` : `https://${liveDomain.hostname}`) : null;
+  return { liveUrl, site, pages: pages ?? [], releases: releases ?? [], domains: domains ?? [] };
 }
 
 export async function action({ request, params }: Route.ActionArgs) {
@@ -96,119 +99,40 @@ export async function action({ request, params }: Route.ActionArgs) {
 }
 
 export default function SiteDetail() {
-  const { site, pages, releases, domains } = useLoaderData<typeof loader>();
+  const { liveUrl, site, pages, releases, domains } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const submitting = navigation.state === "submitting";
 
+  const liveDomain = domains.find((domain) => domain.verified_at);
+  const activeRelease = releases.find((release) => release.id === site.active_release_id);
+  const tasks = [
+    { title: "Create your first page", description: "Start with a blank canvas and make it yours.", done: pages.length > 0, href: "#pages" },
+    { title: "Connect a domain", description: "Give your website a place to call home.", done: Boolean(liveDomain), href: "/admin" },
+    { title: "Publish your website", description: "Review your pages and share them with the world.", done: Boolean(site.active_release_id), href: "#publishing" },
+  ];
+  const complete = tasks.filter((task) => task.done).length;
   return (
     <main>
-      <p className="mb-2 text-sm">
-        <Link to="/admin" className="text-gray-600 hover:underline dark:text-gray-400">
-          ← Overview
-        </Link>
-      </p>
-      <h1 className="mb-1 text-2xl font-semibold">{site.name}</h1>
-      <p className="mb-6 text-sm text-gray-600 dark:text-gray-400">
-        {site.active_release_id ? (
-          <>Published — active release <code>{site.active_release_id.slice(0, 8)}</code></>
-        ) : (
-          "Not published yet"
-        )}
-        {domains.length > 0 ? (
-          <>
-            {" · "}
-            {domains.map((d) => `${d.hostname}${d.verified_at ? "" : " (unverified)"}`).join(", ")}
-          </>
-        ) : null}
-      </p>
-
-      <p className="mb-6 text-sm">
-        <Link to={`/admin/sites/${site.id}/store`} className="hover:underline">
-          Store →
-        </Link>
-      </p>
-
-      <section className="card">
-        <h2 className="mb-3 text-lg font-medium">Pages</h2>
-        {pages.length === 0 ? (
-          <p className="mb-3 text-sm text-gray-600 dark:text-gray-400">No pages yet.</p>
-        ) : (
-          <ul className="mb-4 space-y-2">
-            {pages.map((page) => (
-              <li key={page.id}>
-                <Link to={`/admin/sites/${site.id}/pages/${page.id}`} className="hover:underline">
-                  {page.title}
-                </Link>{" "}
-                <code className="text-sm text-gray-500">(/{page.slug})</code>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        <Form method="post" className="flex items-end gap-2">
-          <input type="hidden" name="intent" value="create-page" />
-          <div className="field mb-0">
-            <label htmlFor="title">Title</label>
-            <input id="title" name="title" type="text" required className="input" />
-          </div>
-          <div className="field mb-0">
-            <label htmlFor="slug">Path (blank = home page)</label>
-            <input id="slug" name="slug" type="text" placeholder="about" className="input" />
-          </div>
-          <button type="submit" disabled={submitting} className="btn">
-            Add page
-          </button>
-        </Form>
-      </section>
-
-      <section className="card">
-        <h2 className="mb-3 text-lg font-medium">Publish</h2>
-        <p className="mb-3 text-sm text-gray-600 dark:text-gray-400">
-          Publishing snapshots every page's current draft into a new, immutable release and makes it
-          live. Editing a draft afterward never changes what's already published.
-        </p>
-        <Form method="post" className="flex items-end gap-2">
-          <input type="hidden" name="intent" value="publish" />
-          <div className="field mb-0 flex-1">
-            <label htmlFor="label">Release label (optional)</label>
-            <input id="label" name="label" type="text" className="input" placeholder="e.g. launch copy" />
-          </div>
-          <button type="submit" disabled={submitting} className="btn">
-            Publish now
-          </button>
-        </Form>
-      </section>
-
-      <section className="card">
-        <h2 className="mb-3 text-lg font-medium">Release history</h2>
-        {releases.length === 0 ? (
-          <p className="text-sm text-gray-600 dark:text-gray-400">No releases yet.</p>
-        ) : (
-          <ul className="space-y-2">
-            {releases.map((release) => (
-              <li key={release.id} className="flex items-center gap-2 text-sm">
-                <span className={release.id === site.active_release_id ? "font-semibold" : ""}>
-                  {release.label || "(untitled release)"} — {new Date(release.created_at).toLocaleString()}
-                  {release.id === site.active_release_id ? " · live" : ""}
-                </span>
-                {release.id !== site.active_release_id ? (
-                  <Form method="post" className="inline">
-                    <input type="hidden" name="intent" value="rollback" />
-                    <input type="hidden" name="release_id" value={release.id} />
-                    <button type="submit" disabled={submitting} className="btn-secondary">
-                      Roll back to this
-                    </button>
-                  </Form>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {actionData && "error" in actionData ? <p className="alert-error">{actionData.error}</p> : null}
-      {actionData && "success" in actionData ? <p className="alert-success">Done.</p> : null}
+      <div className="page-heading"><div><span className="eyebrow">YOUR WEBSITE AT A GLANCE</span><h1>Overview</h1></div><div className="heading-actions"><a className="btn" href={pages[0] ? `/admin/sites/${site.id}/pages/${pages[0].id}` : "#pages"}>↗ Edit website</a>{site.active_release_id && liveDomain ? <a className="btn-secondary" href={liveUrl!} target="_blank" rel="noreferrer">View live ↗</a> : <span className="muted text-sm">{site.active_release_id ? "Connect a verified domain to view live" : "Publish to get a live website"}</span>}</div></div>
+      <div className="site-identity"><strong>{site.name}</strong><span className="muted">{domains[0]?.hostname || "No domain connected"}</span><span className={`badge ${site.active_release_id ? "badge-green" : "badge-amber"}`}>{site.active_release_id ? "● Live" : "○ Not published"}</span></div>
+      <div className="notice-banner"><span className="notice-icon" aria-hidden="true">▤</span><div><strong>Your next chapter starts with a draft.</strong><p>Changes stay private until you publish. Publishing includes every page in this site.</p></div><a href="#publishing" className="btn-secondary">Review & publish →</a></div>
+      {actionData && "error" in actionData ? <p role="alert" className="alert-error">{actionData.error}</p> : null}
+      {actionData && "success" in actionData ? <p role="status" className="alert-success">Changes saved successfully.</p> : null}
+      <div className="overview-grid"><div>
+        <section className="card"><div className="section-heading"><div><span className="eyebrow">GETTING STARTED</span><h2>Continue setup</h2></div><span className="muted text-sm">{complete} of 3 complete</span></div><progress className="setup-progress" value={complete} max={3} aria-label="Site setup progress" />
+          <ul className="task-list">{tasks.map((task) => <li key={task.title}><span className={`task-icon ${task.done ? "complete" : ""}`}>{task.done ? "✓" : "↗"}</span><div><strong>{task.title}</strong><p>{task.description}</p></div><a href={task.href}>{task.done ? "View" : "Continue"} →</a></li>)}</ul>
+        </section>
+        <section className="card" id="pages"><div className="section-heading"><div><span className="eyebrow">WEBSITE</span><h2>Your pages</h2></div><span className="badge">{pages.length} pages</span></div>
+          {pages.length === 0 ? <div className="empty-state"><span aria-hidden="true">▤</span><h3>A blank canvas. Endless possibilities.</h3><p>Create your first page below. Add only what you need.</p></div> : <ul className="page-list">{pages.map((page) => <li key={page.id}><span className="page-icon" aria-hidden="true">▤</span><div><Link to={`/admin/sites/${site.id}/pages/${page.id}`}>{page.title}</Link><small>/{page.slug}</small></div><span className="badge">Draft</span><Link className="row-action" to={`/admin/sites/${site.id}/pages/${page.id}`}>Edit →</Link></li>)}</ul>}
+          <details className="inline-details" open={pages.length === 0}><summary>Add a page <span>＋</span></summary><Form method="post" className="form-row"><input type="hidden" name="intent" value="create-page" /><div className="field"><label htmlFor="title">Page title</label><input id="title" name="title" required className="input" placeholder="e.g. Home" /></div><div className="field"><label htmlFor="slug">Path (blank for home)</label><input id="slug" name="slug" className="input" placeholder="about" /></div><button disabled={submitting} className="btn">Add page</button></Form></details>
+        </section>
+        <section className="card" id="publishing"><span className="eyebrow">READY WHEN YOU ARE</span><h2>Publish your changes</h2><p className="muted section-copy">All current page drafts become the live site. Store products, prices, inventory, and orders are unaffected.</p><Form method="post" className="form-row" onSubmit={(event) => { if (!window.confirm(`Publish all ${pages.length} page drafts on ${site.name}? This replaces the current live presentation.`)) event.preventDefault(); }}><input type="hidden" name="intent" value="publish" /><div className="field"><label htmlFor="label">Release label (optional)</label><input id="label" name="label" className="input" placeholder="e.g. A fresh start" /></div><button disabled={submitting || pages.length === 0} className="btn">{submitting ? "Please wait…" : "Publish site"}</button></Form>{pages.length === 0 ? <p className="muted text-sm">Create a page before publishing.</p> : null}</section>
+      </div><aside className="overview-aside">
+        <section className="card"><span className="eyebrow">LAST PUBLISHED</span><h2>Your live release</h2>{activeRelease ? <div className="release-preview"><span className="badge badge-green">● Live</span><h3>{activeRelease.label || "Website release"}</h3><p>{new Date(activeRelease.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })}</p></div> : <div className="release-preview"><span className="badge">Not published</span><h3>A home for your first release.</h3><p>Once you publish, your live release will appear here.</p></div>}</section>
+        <section className="dark-card"><span className="eyebrow">A LITTLE CLARITY</span><h2>Draft. Publish. Repeat.</h2><p><strong>Drafts are your workspace.</strong> Edit freely. Your visitors keep seeing the last published release.</p><p><strong>Publishing is site-wide.</strong> Review every page before making your changes live.</p><p><strong>Previous releases stay here.</strong> Restore a published version when you need to.</p></section>
+        <section className="card"><span className="eyebrow">PUBLISHING</span><h2>Release history</h2>{releases.length === 0 ? <p className="muted section-copy">No releases yet. Your story starts with the first publish.</p> : <ul className="release-list">{releases.map((release) => <li key={release.id}><strong>{release.label || "Website release"}</strong><small>{new Date(release.created_at).toLocaleDateString("en-GB", { timeZone: "UTC" })}</small>{release.id === site.active_release_id ? <span className="badge badge-green">Live</span> : <Form method="post" onSubmit={(event) => { if (!window.confirm("Restore this release as the live site? Current drafts will stay unchanged.")) event.preventDefault(); }}><input type="hidden" name="intent" value="rollback" /><input type="hidden" name="release_id" value={release.id} /><button disabled={submitting} className="text-link">Restore release ↗</button></Form>}</li>)}</ul>}</section>
+      </aside></div>
     </main>
   );
 }

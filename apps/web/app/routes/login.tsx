@@ -1,13 +1,19 @@
+import { useState } from "react";
 import { Form, redirect, useActionData, useNavigation } from "react-router";
 import { createSupabaseServerClient } from "~/lib/supabase.server";
 import type { Route } from "./+types/login";
+
+function returnTo(request: Request) {
+  const path = new URL(request.url).searchParams.get("returnTo");
+  return path && (path === "/admin" || path.startsWith("/admin/")) ? path : "/admin";
+}
 
 export async function loader({ request }: Route.LoaderArgs) {
   const { supabase } = createSupabaseServerClient(request);
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (user) throw redirect("/admin");
+  if (user) throw redirect(returnTo(request));
   return null;
 }
 
@@ -29,7 +35,7 @@ export async function action({ request }: Route.ActionArgs) {
     return { error: "Invalid email or password." };
   }
 
-  throw redirect("/admin", { headers });
+  throw redirect(returnTo(request), { headers });
 }
 
 export default function Login() {
@@ -37,34 +43,24 @@ export default function Login() {
   const navigation = useNavigation();
   const submitting = navigation.state === "submitting";
 
+  const [visible, setVisible] = useState(false);
+
   return (
-    <main className="mx-auto max-w-sm px-4 py-16">
-      <h1 className="mb-2 text-2xl font-semibold">Sign in</h1>
-      <p className="mb-6 text-sm text-gray-600 dark:text-gray-400">
-        There is no public sign-up here by design — accounts are created
-        deliberately by a workspace owner (see <code>docs/setup.md</code>).
-      </p>
-      <Form method="post" className="card">
-        <div className="field">
-          <label htmlFor="email">Email</label>
-          <input id="email" name="email" type="email" autoComplete="email" required className="input" />
-        </div>
-        <div className="field">
-          <label htmlFor="password">Password</label>
-          <input
-            id="password"
-            name="password"
-            type="password"
-            autoComplete="current-password"
-            required
-            className="input"
-          />
-        </div>
-        {actionData?.error ? <p className="alert-error">{actionData.error}</p> : null}
-        <button type="submit" disabled={submitting} className="btn mt-2 w-full justify-center">
-          {submitting ? "Signing in…" : "Sign in"}
-        </button>
-      </Form>
+    <main className="auth-page">
+      <a className="brand auth-brand" href="/login"><span className="brand-mark">D</span><span>Digital Romanian<span className="brand-caption">Website administration</span></span></a>
+      <section className="auth-card">
+        <span className="eyebrow">YOUR WORKSPACE, CONNECTED</span>
+        <h1>Welcome back.</h1>
+        <p className="muted">Sign in to build, manage, and publish your websites.</p>
+        <Form method="post" className="auth-form">
+          <div className="field"><label htmlFor="email">Email address</label><input id="email" name="email" type="email" autoComplete="username" required className="input" placeholder="you@company.com" /></div>
+          <div className="field"><label htmlFor="password">Password</label><div className="password-field"><input id="password" name="password" type={visible ? "text" : "password"} autoComplete="current-password" required className="input" /><button type="button" onClick={() => setVisible(!visible)} aria-pressed={visible}>{visible ? "Hide" : "Show"}</button></div></div>
+          {actionData?.error ? <p role="alert" className="alert-error">{actionData.error}</p> : null}
+          <button type="submit" disabled={submitting} className="btn auth-submit">{submitting ? "Signing in…" : "Sign in"}<span aria-hidden="true">→</span></button>
+        </Form>
+        <details className="auth-help"><summary>Need help signing in?</summary><p>Contact your workspace owner to request access or help recovering your account.</p></details>
+      </section>
+      <footer className="auth-footer">Your next great website starts here.</footer>
     </main>
   );
 }

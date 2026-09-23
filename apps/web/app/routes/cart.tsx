@@ -88,7 +88,7 @@ export default function Cart() {
 
   if (!loaderData.ready) {
     return (
-      <main>
+      <main className="storefront-page">
         <h1>Cart</h1>
         <p role="status">This store isn't set up yet: {loaderData.message}</p>
       </main>
@@ -97,7 +97,7 @@ export default function Cart() {
 
   if (loaderData.cartState === "unavailable") {
     return (
-      <main>
+      <main className="storefront-page">
         <h1>Cart</h1>
         <p role="alert">Could not load your cart right now: {loaderData.message}. Please try again.</p>
       </main>
@@ -106,7 +106,7 @@ export default function Cart() {
 
   if (loaderData.cartState === "empty") {
     return (
-      <main>
+      <main className="storefront-page">
         <h1>Cart</h1>
         <p>
           Your cart is empty. <Link to="/shop">Continue shopping</Link>
@@ -118,7 +118,7 @@ export default function Cart() {
   const { cart, currencyCode } = loaderData;
 
   return (
-    <main>
+    <main className="storefront-page">
       <h1>Cart</h1>
       <ul>
         {cart.items.map((item) => (

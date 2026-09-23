@@ -263,7 +263,7 @@ export default function Checkout() {
 
   if (!loaderData.ready) {
     return (
-      <main>
+      <main className="storefront-page">
         <h1>Checkout</h1>
         <p role="status">This store isn't set up for checkout yet: {loaderData.message}</p>
       </main>
@@ -272,7 +272,7 @@ export default function Checkout() {
 
   if (loaderData.cartState === "unavailable") {
     return (
-      <main>
+      <main className="storefront-page">
         <h1>Checkout</h1>
         <p role="alert">Could not load your cart right now: {loaderData.message}. Please try again.</p>
       </main>
@@ -281,7 +281,7 @@ export default function Checkout() {
 
   if (loaderData.cartState === "empty") {
     return (
-      <main>
+      <main className="storefront-page">
         <h1>Checkout</h1>
         <p>
           Your cart is empty. <Link to="/shop">Continue shopping</Link>
@@ -295,7 +295,7 @@ export default function Checkout() {
   const hasShipping = cart.shipping_methods.length > 0;
 
   return (
-    <main>
+    <main className="storefront-page">
       <h1>Checkout</h1>
 
       <section className="card">

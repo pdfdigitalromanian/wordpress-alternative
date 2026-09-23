@@ -5,6 +5,7 @@
 // import in page-editor.tsx. Verified via the built output that this
 // keeps the two apart (Part A SS5: "Keep editor-specific code and
 // controls out of public website bundles").
+import { redirect } from "react-router";
 import { Render, resolveAllData } from "@puckeditor/core/rsc";
 import type { Data } from "@puckeditor/core";
 import { componentConfig, type ComponentProps, type StorefrontMetadata } from "~/lib/component-registry/config";
@@ -20,6 +21,8 @@ export async function loader({ request }: Route.LoaderArgs) {
   const hostname = url.hostname;
   const slug = url.pathname.replace(/^\/+|\/+$/g, ""); // "" for "/", "about" for "/about"
 
+  if (url.pathname === "/" && url.searchParams.get("view") !== "live" && ["localhost", "127.0.0.1", "[::1]"].includes(hostname)) throw redirect("/login");
+
   const admin = createSupabaseAdminClient();
 
   const { data: mapping, error: mappingError } = await admin
@@ -29,7 +32,10 @@ export async function loader({ request }: Route.LoaderArgs) {
     .maybeSingle();
 
   if (mappingError) throw new Response("Internal Server Error", { status: 500 });
-  if (!mapping?.site_id) throw new Response("Not Found", { status: 404 });
+  if (!mapping?.site_id) {
+    if (url.pathname === "/") throw redirect("/login");
+    throw new Response("Not Found", { status: 404 });
+  }
 
   const { data: site, error: siteError } = await admin
     .from("sites")
