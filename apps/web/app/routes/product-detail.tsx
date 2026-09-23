@@ -1,3 +1,4 @@
+import { ShopNavigation } from "~/components/shop-navigation";
 import { useState } from "react";
 import { data, Form, useActionData, useLoaderData, useNavigation } from "react-router";
 import { resolveSiteIdByHost } from "~/lib/site-resolution.server";
@@ -80,7 +81,7 @@ export default function ProductDetail() {
     (selectedVariant.inventory_quantity ?? 0) <= 0;
 
   return (
-    <main className="storefront-page">
+    <main className="storefront-page"><ShopNavigation />
       <h1>{product.title}</h1>
       {product.images.length > 0 ? (
         <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>

@@ -1,3 +1,4 @@
+import { siteAccess } from "~/lib/site-access.server";
 import { Form, Link, useActionData, useLoaderData, useNavigation } from "react-router";
 import { bufferToPgBytea, decryptSecret, encryptSecret, maskSecret, pgByteaToBuffer } from "~/lib/secrets.server";
 import { testMedusaConnection, listStoreRegions, type StoreRegion } from "~/lib/medusa.server";
@@ -37,7 +38,8 @@ async function loadDecryptedSecretKey(
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
-  const { supabase } = createSupabaseServerClient(request);
+  const { supabase, canManage } = await siteAccess(request, params.siteId!);
+  if (!canManage) throw new Response("Store settings require owner or administrator access.", { status: 403 });
   const siteId = params.siteId!;
 
   const { data: site, error: siteError } = await supabase.from("sites").select("id, name").eq("id", siteId).single();
@@ -65,7 +67,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     }
   }
 
-  return { site, connection, maskedKey, regions };
+  const { data: domains } = await supabase.from("site_domains").select("hostname,verified_at").eq("site_id", site.id);
+  const domain = domains?.find(domain => domain.verified_at)?.hostname;
+  const currentUrl = new URL(request.url);
+  const shopUrl = domain ? (domain === currentUrl.hostname ? `${currentUrl.origin}/shop` : `https://${domain}/shop`) : null;
+  return { site, connection, maskedKey, regions, shopUrl };
 }
 
 export async function action({ request, params }: Route.ActionArgs) {
@@ -76,6 +82,8 @@ export async function action({ request, params }: Route.ActionArgs) {
   if (!user) throw new Response("Unauthorized", { status: 401 });
 
   const siteId = params.siteId!;
+  const { canManage } = await siteAccess(request, siteId);
+  if (!canManage) return { intent: "permission", error: "Store settings require owner or administrator access." };
   const formData = await request.formData();
   const intent = String(formData.get("intent") ?? "");
 
@@ -145,7 +153,7 @@ export async function action({ request, params }: Route.ActionArgs) {
 }
 
 export default function StoreSetup() {
-  const { site, connection, maskedKey, regions } = useLoaderData<typeof loader>();
+  const { site, connection, maskedKey, regions, shopUrl } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const submitting = navigation.state === "submitting";
@@ -157,12 +165,12 @@ export default function StoreSetup() {
           ← {site.name}
         </Link>
       </p>
-      <h1 className="mb-1 text-2xl font-semibold">Store</h1>
+      <div className="page-heading"><div><span className="eyebrow">COMMERCE</span><h1>Store</h1></div><Link to={`/admin/sites/${site.id}/store/products`} className="btn">Products & add product →</Link></div>
       <p className="mb-6 text-sm text-gray-600 dark:text-gray-400">
-        Commerce is optional per site (Part B SS15) and backed by an isolated Medusa installation — one
-        per commerce-enabled site, not a shared multi-tenant backend.
+        Connect your catalog, configure the shop, and manage your products.
       </p>
 
+      <section className="card"><h2>Build your shop</h2><p className="section-copy muted">The shop lives at /shop. Add a Product grid, Featured product, or Shop / cart button from the editor’s Shop group. Products need prices, variants, and a sales channel before shoppers can buy.</p><div className="heading-actions"><Link to={`/admin/sites/${site.id}/pages`} className="btn-secondary">Add shop blocks to a page</Link>{shopUrl ? <a href={shopUrl} className="btn-secondary" target="_blank" rel="noreferrer">Open shop ↗</a> : <span className="muted">Connect a verified domain to open the public shop.</span>}</div></section>
       <section className="card">
         <h2 className="mb-3 text-lg font-medium">Connection</h2>
 

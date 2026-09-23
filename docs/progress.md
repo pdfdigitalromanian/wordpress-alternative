@@ -248,3 +248,42 @@ In priority order:
   first checking directly (`npx playwright install` /
   `pnpm exec playwright test`), regardless of what a tool search for a
   browser-automation MCP connector returns.
+
+## Builder and shop feature expansion — 23 September 2026
+
+Added a dedicated searchable/filterable Pages screen, blank/optional starter
+creation, page settings, duplication and explicit draft removal. Reserved CMS
+and commerce paths are validated; page settings use optimistic concurrency.
+Private staff-only draft previews resolve real commerce data server-side and
+send no-store/noindex headers. Publishing now has a dedicated site-wide review,
+real draft/live comparisons, removed-page visibility, a stale-review check,
+release labels and confirmed rollback. The review token is checked before the
+existing atomic publish RPC; it is not a database-level lock against concurrent
+edits after that check.
+
+Expanded the Puck library with image, spacer, divider, responsive columns,
+card, FAQ, featured product picker and shop/cart buttons. Existing Product grid
+remains connected to Medusa. Added optional introduction/about/contact/shop starters
+and search title/description fields. Blank remains empty. Editor Preview and
+Review & publish wait for saves; failures expose retry and draft download.
+
+Store Products now supports search/pagination, connection-error states and
+creating an actual Medusa product **draft** through the guarded server adapter.
+Variants, prices, shipping, stock, sales-channel availability and product
+publication continue in native Medusa Admin. No automatic product publication,
+paid services, hosted migration, or new payment provider is introduced. Public
+shop search and shop/cart navigation connect the customer journey.
+
+Verification passed: TypeScript, production build, 27 unit tests and all nine
+Playwright feature flows against the built application with isolated local
+Supabase/Medusa service doubles. Browser coverage includes page creation,
+autosave recovery, private preview, reviewed publication, stale-write rejection,
+product draft creation, featured-product selection, catalog search, viewer
+restrictions and mobile page-list layout. No hosted data writes, deployment or
+live payment verification were performed.
+
+The browser tests exposed and fixed two integration issues: Puck external
+pickers must receive their scoped data source before mounting, and editor
+navigation must track authored changes immediately plus the version of the
+in-flight save. A product selection followed immediately by Preview now waits
+for the latest draft rather than leaving on an older save acknowledgment.

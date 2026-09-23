@@ -73,7 +73,8 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export function meta({ loaderData }: Route.MetaArgs) {
   if (!loaderData) return [{ title: "Digital Romanian CMS" }];
-  return [{ title: loaderData.title }];
+  const props = loaderData.document.root.props as { seoTitle?: unknown; description?: unknown } | undefined;
+  return [{ title: typeof props?.seoTitle === "string" && props.seoTitle ? props.seoTitle : loaderData.title }, ...(typeof props?.description === "string" ? [{ name: "description", content: props.description }] : [])];
 }
 
 export default function SitePage({ loaderData }: Route.ComponentProps) {

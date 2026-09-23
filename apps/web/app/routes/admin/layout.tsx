@@ -1,8 +1,9 @@
 import { Form, Link, NavLink, Outlet, redirect, useLoaderData, useMatches, useParams } from "react-router";
+import { siteAccess } from "~/lib/site-access.server";
 import { createSupabaseServerClient } from "~/lib/supabase.server";
 import type { Route } from "./+types/layout";
 
-export async function loader({ request }: Route.LoaderArgs) {
+export async function loader({ request, params }: Route.LoaderArgs) {
   const { supabase } = createSupabaseServerClient(request);
   const {
     data: { user },
@@ -10,17 +11,20 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   if (!user) throw redirect(`/login?returnTo=${encodeURIComponent(new URL(request.url).pathname)}`);
 
-  return { email: user.email };
+  const access = params.siteId ? await siteAccess(request, params.siteId) : null;
+  return { email: user.email, canManage: access?.canManage ?? false };
 }
 
-export default function AdminLayout() {
-  const { email } = useLoaderData<typeof loader>();
+export function headers() { return { "Cache-Control": "private, no-store" }; }
 
-  const { siteId, pageId } = useParams();
+export default function AdminLayout() {
+  const { email, canManage } = useLoaderData<typeof loader>();
+
+  const { siteId, pageId, previewId } = useParams();
   const matches = useMatches();
   const site = matches.map((match) => (match.loaderData as { site?: { name: string } } | undefined)?.site).find(Boolean);
   const base = siteId ? `/admin/sites/${siteId}` : "/admin";
-  if (pageId) return <Outlet />;
+  if (pageId || previewId) return <Outlet />;
 
   return (
     <div className="admin-shell">
@@ -31,7 +35,7 @@ export default function AdminLayout() {
         <div className="nav-label">WORKSPACE</div>
         <nav className="admin-nav" aria-label="Administration">
           <NavLink to={base} end><span aria-hidden="true">▦</span>{siteId ? "Overview" : "All sites"}</NavLink>
-          {siteId ? <><Link to={`${base}#pages`}><span aria-hidden="true">▤</span>Website</Link><NavLink to={`${base}/store`}><span aria-hidden="true">▱</span>Store</NavLink><Link to={`${base}#publishing`}><span aria-hidden="true">↗</span>Publishing</Link></> : null}
+          {siteId ? <><NavLink to={`${base}/pages`}><span aria-hidden="true">▤</span>Website</NavLink>{canManage ? <NavLink to={`${base}/store`}><span aria-hidden="true">▱</span>Store</NavLink> : null}<NavLink to={`${base}/publishing`}><span aria-hidden="true">↗</span>Publishing</NavLink></> : null}
         </nav>
         <div className="sidebar-bottom"><span className="account-avatar">{email?.slice(0, 1).toUpperCase()}</span><div className="account-details"><span>{email}</span><Form method="post" action="/logout"><button type="submit">Sign out ↗</button></Form></div></div>
       </aside>

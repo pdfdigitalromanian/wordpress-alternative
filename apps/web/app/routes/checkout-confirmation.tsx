@@ -1,3 +1,4 @@
+import { ShopNavigation } from "~/components/shop-navigation";
 import { data, Link, useLoaderData } from "react-router";
 import { resolveSiteIdByHost } from "~/lib/site-resolution.server";
 import { resolveStorefront, getAuthorizedOrderId } from "~/lib/commerce.server";
@@ -49,7 +50,7 @@ export default function CheckoutConfirmation() {
 
   if (!loaderData.ready) {
     return (
-      <main className="storefront-page">
+      <main className="storefront-page"><ShopNavigation />
         <h1>Order confirmation</h1>
         <p role="status">{loaderData.message}</p>
       </main>
@@ -58,7 +59,7 @@ export default function CheckoutConfirmation() {
 
   if (!loaderData.authorized) {
     return (
-      <main className="storefront-page">
+      <main className="storefront-page"><ShopNavigation />
         <h1>Order confirmation</h1>
         <p role="alert">
           No order found for this session. <Link to="/shop">Continue shopping</Link>
@@ -71,7 +72,7 @@ export default function CheckoutConfirmation() {
   const isManualTestOrder = order.payment_status !== "captured";
 
   return (
-    <main className="storefront-page">
+    <main className="storefront-page"><ShopNavigation />
       <h1>Order confirmed</h1>
       {isManualTestOrder ? (
         <p role="status">

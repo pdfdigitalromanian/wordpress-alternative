@@ -13,6 +13,9 @@ export default [
   route("admin", "routes/admin/layout.tsx", [
     index("routes/admin/index.tsx"),
     route("sites/:siteId", "routes/admin/site.tsx"),
+    route("sites/:siteId/pages", "routes/admin/pages.tsx"),
+    route("sites/:siteId/publishing", "routes/admin/publishing.tsx"),
+    route("sites/:siteId/preview/:previewId", "routes/admin/preview.tsx"),
     route("sites/:siteId/pages/:pageId", "routes/admin/page-editor.tsx"),
     route("sites/:siteId/store", "routes/admin/store.tsx"),
     route("sites/:siteId/store/products", "routes/admin/store-products.tsx"),

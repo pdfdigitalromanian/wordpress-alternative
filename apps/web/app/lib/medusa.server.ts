@@ -261,7 +261,7 @@ const AdminProductSchema = z.object({
 export async function listMedusaProducts(
   backendUrl: string,
   secretKey: string,
-  opts: { limit?: number; offset?: number } = {},
+  opts: { limit?: number; offset?: number; q?: string } = {},
 ): Promise<{ products: z.infer<typeof AdminProductSchema>[]; count: number }> {
   return fetchMedusaJson(
     {
@@ -272,10 +272,17 @@ export async function listMedusaProducts(
         limit: String(opts.limit ?? 20),
         offset: String(opts.offset ?? 0),
         fields: "id,title,status,thumbnail,handle",
+        ...(opts.q ? { q: opts.q } : {}),
       },
     },
     z.object({ products: z.array(AdminProductSchema), count: z.number() }),
   );
+}
+
+/** Creates only a draft. Catalog availability, variants, prices and inventory
+ * are completed in native Medusa Admin before publication. */
+export async function createMedusaProductDraft(backendUrl: string, secretKey: string, product: { title: string; handle: string; description: string; thumbnail?: string }) {
+  return fetchMedusaJson({ backendUrl, path: "/admin/products", authHeader: basicAuthHeader(secretKey), method: "POST", body: { ...product, status: "draft" } }, z.object({ product: z.object({ id: z.string(), title: z.string(), status: z.string() }) }));
 }
 
 // ---------------------------------------------------------------------
@@ -338,7 +345,7 @@ const PRODUCT_FIELDS =
 export async function listStoreProducts(
   backendUrl: string,
   publishableKey: string,
-  opts: { regionId: string; limit?: number; offset?: number; categoryId?: string },
+  opts: { regionId: string; limit?: number; offset?: number; categoryId?: string; q?: string; productId?: string },
 ): Promise<{ products: StoreProduct[]; count: number }> {
   return fetchMedusaJson(
     {
@@ -351,6 +358,8 @@ export async function listStoreProducts(
         offset: String(opts.offset ?? 0),
         fields: PRODUCT_FIELDS,
         ...(opts.categoryId ? { category_id: opts.categoryId } : {}),
+        ...(opts.q ? { q: opts.q } : {}),
+        ...(opts.productId ? { id: opts.productId } : {}),
       },
     },
     z.object({ products: z.array(StoreProductSchema), count: z.number() }),

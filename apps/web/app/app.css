@@ -149,3 +149,43 @@ a, button, input, select, textarea, summary { outline-offset: 4px; }
 .editor-empty-symbol { width: 100px; height: 100px; border-radius: 50%; display: grid; place-items: center; background: #eeece6; color: #83837a; font-size: 44px; margin-bottom: 32px; }
 .editor-empty h2 { font-size: 28px; font-weight: 600; margin-bottom: 16px; }
 .editor-empty p { font-size: 16px; line-height: 1.6; margin-bottom: 32px; }
+@media (max-width: 760px) { .sidebar-bottom { display: flex; padding-top: 12px; } .account-details { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex: 1; } .account-details button { margin-top: 0; min-height: 32px; } }
+.cms-dialog { width: min(620px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); margin: auto; padding: 28px; border: 1px solid #dcdad4; border-radius: 12px; background: #fff; color: #191919; overflow-y: auto; }
+.cms-dialog::backdrop { background: rgb(15 15 12 / .38); }
+.cms-dialog h2 { font-size: 22px; font-weight: 600; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; }
+.filter-bar { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 16px; margin-bottom: 24px; }
+.filter-bar .field { margin: 0; min-width: 160px; }
+.filter-bar .field:first-child { flex: 1; }
+.filter-bar > .muted { font-size: 13px; padding-bottom: 12px; }
+.page-manager-list > li { display: flex; align-items: center; gap: 18px; padding: 20px 0; border-bottom: 1px solid #e5e3dc; }
+.page-manager-list > li:last-child { border: none; }
+.page-manager-list > li > div:first-of-type { flex: 1; min-width: 0; }
+.page-manager-list small { display: block; color: #727268; margin-top: 6px; font-size: 13px; overflow-wrap: anywhere; }
+.page-title-link { font-weight: 550; }
+.row-actions { display: flex; align-items: center; gap: 12px; }
+.row-menu { position: relative; }
+.row-menu summary { list-style: none; padding: 12px; min-height: 44px; }
+.row-menu > div { position: absolute; right: 0; z-index: 15; min-width: 180px; background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 6px; box-shadow: 0 8px 20px #00000012; }
+.row-menu button { display: block; width: 100%; text-align: left; padding: 12px; border-radius: 4px; font-size: 14px; }
+.row-menu button:hover { background: #f4f2eb; }
+.starter-options { margin: 24px 0; }
+.starter-options legend { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+.starter-options label { display: flex; align-items: flex-start; gap: 12px; padding: 14px; border: 1px solid #dedbd3; border-radius: 7px; margin-bottom: 8px; cursor: pointer; }
+.starter-options input { margin-top: 4px; accent-color: #151515; }
+.starter-options small { display: block; color: #66665c; line-height: 1.5; margin-top: 4px; }
+.starter-options strong { font-size: 14px; }
+.check-label { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; line-height: 1.6; margin-bottom: 24px; }
+.check-label input { margin-top: 5px; width: 18px; height: 18px; flex: 0 0 auto; accent-color: #151515; }
+.preview-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 24px; background: #fffbf2; border-bottom: 1px solid #ddd; }
+.preview-toolbar > div { display: flex; align-items: center; gap: 16px; }
+.preview-notice { padding: 12px 24px; background: #f1efe6; color: #58584f; font-size: 13px; }
+.editor-recovery { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 12px 24px; background: #fff0ed; color: #912d25; font-size: 14px; }
+.product-thumbnail { width: 64px; height: 64px; object-fit: contain; border-radius: 6px; background: #f5f4ef; }
+.product-placeholder { display: grid; place-items: center; font-size: 26px; color: #828278; flex: 0 0 auto; }
+.pagination { display: flex; justify-content: flex-end; gap: 12px; }
+.shop-navigation { display: flex; justify-content: space-between; border-bottom: 1px solid #ddd; margin-bottom: 40px; padding-bottom: 20px; font-weight: 550; }
+@media (max-width: 640px) { .page-manager-list > li { flex-wrap: wrap; gap: 12px; } .page-manager-list > li > div:first-of-type { min-width: 140px; } .filter-bar .field { width: 100%; } .preview-toolbar, .preview-toolbar > div { flex-wrap: wrap; } .cms-dialog { padding: 20px; } }
+.quick-insert { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.quick-insert select { border: 1px solid #d7d6cf; border-radius: 6px; padding: 10px; max-width: 180px; background: #fff; }
+@media (max-width: 640px) { .quick-insert { flex-wrap: wrap; } .quick-insert label { position: absolute; width: 1px; height: 1px; overflow: hidden; } .quick-insert select { max-width: 140px; } }

@@ -8,7 +8,8 @@
     "start": "react-router-serve ./build/server/index.js",
     "typecheck": "react-router typegen && tsc",
     "test": "find app/lib -name '*.test.ts' | xargs node --experimental-strip-types --test",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:features": "pnpm build && playwright test --config playwright.features.config.ts"
   },
   "dependencies": {
     "@puckeditor/core": "^0.23.0",

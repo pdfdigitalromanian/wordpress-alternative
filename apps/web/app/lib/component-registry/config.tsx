@@ -1,3 +1,4 @@
+import { safeLink } from "../page-model";
 import type { Config, Slot } from "@puckeditor/core";
 
 /**
@@ -30,6 +31,14 @@ export type ComponentProps = {
   Heading: { text: string; level: "h1" | "h2" | "h3" };
   Text: { text: string };
   Button: { label: string; href: string };
+  Image: { src: string; alt: string; caption: string };
+  Spacer: { height: number };
+  Divider: { color: string };
+  Columns: { columns: number; gap: number; content: Slot };
+  Card: { title: string; text: string };
+  FAQ: { question: string; answer: string };
+  ShopLink: { label: string; destination: "shop" | "cart" };
+  ProductCard: { product: { id: string; title: string } | null; resolvedProducts?: ProductGridResolvedProduct[]; resolvedCurrency?: string | null; resolvedError?: string | null };
   ProductGrid: {
     columns: 2 | 3 | 4;
     spacing: "small" | "medium" | "large";
@@ -65,7 +74,23 @@ const paddingValues: Record<ComponentProps["Section"]["padding"], string> = {
   large: "4rem",
 };
 
+async function fetchProducts(metadata: unknown, extra: Record<string, string> = {}) {
+  const meta = metadata as Partial<StorefrontMetadata>;
+  if (!meta?.siteId || !meta.origin) return { products: [], currencyCode: null, error: "Connect a store to show products." };
+  const url = new URL(meta.mode === "preview" ? "/api/preview-storefront-products" : "/api/storefront-products", meta.origin);
+  url.searchParams.set("siteId", meta.siteId);
+  for (const [key, value] of Object.entries(extra)) url.searchParams.set(key, value);
+  const response = await fetch(url);
+  if (!response.ok) throw new Error("Products could not be loaded. Check the store connection.");
+  return await response.json() as { products: ProductGridResolvedProduct[]; currencyCode: string | null; error: string | null };
+}
+
 export const componentConfig: Config<ComponentProps> = {
+  categories: {
+    basic: { title: "Basic", components: ["Heading", "Text", "Image", "Button", "Spacer", "Divider"] },
+    layout: { title: "Layout & content", components: ["Section", "Columns", "Card", "FAQ"] },
+    commerce: { title: "Shop", components: ["ProductGrid", "ProductCard", "ShopLink"] },
+  },
   components: {
     Section: {
       label: "Section",
@@ -104,7 +129,7 @@ export const componentConfig: Config<ComponentProps> = {
       defaultProps: { text: "Heading", level: "h2" },
       render: ({ text, level }) => {
         const Tag = level;
-        return <Tag>{text}</Tag>;
+        return <Tag style={{ fontSize: level === "h1" ? "clamp(32px, 5vw, 56px)" : level === "h2" ? "clamp(24px, 3vw, 36px)" : "24px", lineHeight: 1.15, fontWeight: 650, margin: "0 0 20px" }}>{text}</Tag>;
       },
     },
     Text: {
@@ -113,7 +138,7 @@ export const componentConfig: Config<ComponentProps> = {
         text: { type: "textarea" },
       },
       defaultProps: { text: "Text block." },
-      render: ({ text }) => <p>{text}</p>,
+      render: ({ text }) => <p style={{ lineHeight: 1.75, whiteSpace: "pre-line", margin: "0 0 20px", fontSize: 16 }}>{text}</p>,
     },
     Button: {
       label: "Button",
@@ -122,7 +147,35 @@ export const componentConfig: Config<ComponentProps> = {
         href: { type: "text" },
       },
       defaultProps: { label: "Click me", href: "#" },
-      render: ({ label, href }) => <a href={href}>{label}</a>,
+      render: ({ label, href }) => <a href={safeLink(href)} style={{ display: "inline-flex", padding: "12px 22px", borderRadius: 6, background: "var(--site-accent, #171717)", color: "white", textDecoration: "none", margin: "8px 0" }}>{label}</a>,
+    },
+    Image: {
+      label: "Image", fields: { src: { type: "text", label: "Image URL (https://)" }, alt: { type: "text", label: "Alternative text (empty for decorative images)" }, caption: { type: "text" } },
+      defaultProps: { src: "", alt: "", caption: "" },
+      render: ({ src, alt, caption }) => <figure style={{ margin: "0 0 24px" }}>{/^https?:\/\//i.test(src) ? <img src={src} alt={alt} loading="lazy" style={{ width: "100%", height: "auto", borderRadius: 8 }} /> : <div style={{ background: "#f1f0eb", padding: 48, textAlign: "center" }}>Choose an image in the inspector</div>}{caption ? <figcaption style={{ fontSize: 14, marginTop: 8 }}>{caption}</figcaption> : null}</figure>,
+    },
+    Spacer: { fields: { height: { type: "number", min: 8, max: 240 } }, defaultProps: { height: 40 }, render: ({ height }) => <div aria-hidden="true" style={{ height: Math.min(240, Math.max(8, height)) }} /> },
+    Divider: { fields: { color: { type: "text" } }, defaultProps: { color: "#deddd6" }, render: ({ color }) => <hr style={{ border: 0, borderTop: `1px solid ${color}`, margin: "24px 0" }} /> },
+    Columns: { fields: { columns: { type: "select", options: [2, 3, 4].map(value => ({ label: String(value), value })) }, gap: { type: "number", min: 0, max: 80 }, content: { type: "slot" } }, defaultProps: { columns: 2, gap: 24, content: [] }, render: ({ columns, gap, content: Content }) => <Content style={{ display: "grid", gridTemplateColumns: `repeat(auto-fit, minmax(min(100%, ${Math.max(180, 800 / columns)}px), 1fr))`, gap }} /> },
+    Card: { fields: { title: { type: "text" }, text: { type: "textarea" } }, defaultProps: { title: "Something worth sharing", text: "Tell your visitors more." }, render: ({ title, text }) => <article style={{ border: "1px solid #deddd6", borderRadius: 8, padding: 28 }}><h3 style={{ fontSize: 22, fontWeight: 600, marginBottom: 12 }}>{title}</h3><p style={{ lineHeight: 1.7, whiteSpace: "pre-line" }}>{text}</p></article> },
+    FAQ: { label: "Accordion / FAQ", fields: { question: { type: "text" }, answer: { type: "textarea" } }, defaultProps: { question: "What would you like to know?", answer: "Add a useful answer here." }, render: ({ question, answer }) => <details style={{ padding: "20px 0", borderBottom: "1px solid #ddd" }}><summary style={{ fontWeight: 600, cursor: "pointer" }}>{question}</summary><p style={{ paddingTop: 16, lineHeight: 1.7, whiteSpace: "pre-line" }}>{answer}</p></details> },
+    ShopLink: { label: "Shop / cart button", fields: { label: { type: "text" }, destination: { type: "select", options: [{ label: "Shop", value: "shop" }, { label: "Cart", value: "cart" }] } }, defaultProps: { label: "Shop now", destination: "shop" }, render: ({ label, destination }) => <a href={destination === "cart" ? "/cart" : "/shop"} style={{ display: "inline-flex", padding: "12px 22px", border: "1px solid currentColor", borderRadius: 6 }}>{label} →</a> },
+    ProductCard: {
+      label: "Featured product",
+      fields: { product: { type: "external", placeholder: "Choose a store product", fetchList: async () => [], mapProp: (item) => ({ id: item.id, title: item.title }), getItemSummary: (item) => item?.title || "Choose a product" } },
+      defaultProps: { product: null },
+
+      resolveData: async ({ props }, { metadata }) => {
+        if (!props.product?.id) return { props: { ...props, resolvedProducts: [], resolvedError: null } };
+        try { const result = await fetchProducts(metadata, { productId: props.product.id }); return { props: { ...props, resolvedProducts: result.products, resolvedCurrency: result.currencyCode, resolvedError: result.error } }; }
+        catch { return { props: { ...props, resolvedProducts: [], resolvedError: "Products could not be loaded. Check the store connection." } }; }
+      },
+      render: ({ product, resolvedProducts, resolvedCurrency, resolvedError }) => {
+        const item = resolvedProducts?.[0];
+        if (resolvedError) return <p role="status">{resolvedError}</p>;
+        if (!item) return <div style={{ padding: 32, border: "1px dashed #bbb", textAlign: "center" }}>{product ? "This product is not currently available." : "Choose a product in the inspector. Prices stay connected to your store."}</div>;
+        return <article style={{ maxWidth: 480, border: "1px solid #ddd", borderRadius: 8, overflow: "hidden" }}>{item.thumbnail ? <img src={item.thumbnail} alt={item.title} style={{ width: "100%", aspectRatio: "4/3", objectFit: "contain" }} /> : null}<div style={{ padding: 24 }}><h3 style={{ fontSize: 24, fontWeight: 600 }}>{item.title}</h3>{item.price != null && resolvedCurrency ? <p style={{ margin: "12px 0" }}>{new Intl.NumberFormat("en", { style: "currency", currency: resolvedCurrency }).format(item.price)}</p> : null}<a href={item.handle ? `/products/${item.handle}` : "/shop"}>Choose options →</a></div></article>;
+      },
     },
     ProductGrid: {
       label: "Product grid",
@@ -202,7 +255,7 @@ export const componentConfig: Config<ComponentProps> = {
           <ul
             style={{
               display: "grid",
-              gridTemplateColumns: `repeat(${columns}, 1fr)`,
+              gridTemplateColumns: `repeat(auto-fit, minmax(min(100%, ${Math.max(160, 700 / columns)}px), 1fr))`,
               gap,
               listStyle: "none",
               padding: 0,
@@ -236,7 +289,28 @@ export const componentConfig: Config<ComponentProps> = {
   root: {
     fields: {
       content: { type: "slot" },
+      seoTitle: { type: "text", label: "Search title (optional)" },
+      description: { type: "textarea", label: "Search description" },
     },
     render: ({ content: Content }) => <Content minEmptyHeight={200} />,
   },
 };
+
+/** Bind the picker before Puck mounts it: external fields load their initial
+ * result set on mount, before a later resolveFields update can take effect. */
+export function createEditorConfig(metadata: StorefrontMetadata): Config<ComponentProps> {
+  return { ...componentConfig, components: { ...componentConfig.components, ProductCard: {
+    ...componentConfig.components.ProductCard,
+    fields: { product: {
+      type: "external", placeholder: "Search your published products", showSearch: true,
+      fetchList: async ({ query }) => {
+        const result = await fetchProducts(metadata, { q: query, limit: "24" });
+        if (result.error) throw new Error(result.error);
+        return result.products;
+      },
+      mapProp: item => ({ id: item.id, title: item.title }),
+      mapRow: item => ({ Product: item.title, Path: item.handle || "No public path" }),
+      getItemSummary: item => item?.title || "Choose a product",
+    } },
+  } } };
+}

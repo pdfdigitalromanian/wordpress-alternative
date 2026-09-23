@@ -179,3 +179,15 @@ test("rejects excessive nesting depth", () => {
   assert.equal(result.ok, false);
   if (!result.ok) assert.match(result.error, /nesting/);
 });
+
+test("rejects duplicate component identities that would make editing ambiguous", () => {
+  assert.equal(validate(doc([{ type: "Heading", props: { id: "same", text: "One" } }, { type: "Text", props: { id: "same", text: "Two" } }])).ok, false);
+});
+test("rejects non-text content rather than letting it crash the renderer", () => {
+  assert.equal(validate(doc([{ type: "Text", props: { id: "t", text: { injected: true } } }])).ok, false);
+});
+test("supports existing blank pages and validates numeric bounds", () => {
+  assert.equal(validate({ content: [], root: { props: {} } }).ok, true);
+  const config = { components: { Spacer: { fields: { height: { type: "number", min: 8, max: 240 } } } } };
+  assert.equal(validatePuckDocument(doc([{ type: "Spacer", props: { id: "s", height: 999999 } }]), config).ok, false);
+});

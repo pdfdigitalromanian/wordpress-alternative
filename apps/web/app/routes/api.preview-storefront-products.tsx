@@ -45,6 +45,8 @@ export async function loader({ request }: Route.LoaderArgs) {
       regionId: storefront.region.id,
       limit: Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 24) : 8,
       categoryId,
+      q: url.searchParams.get("q")?.slice(0, 200) || undefined,
+      productId: url.searchParams.get("productId") || undefined,
     });
 
     return Response.json({

@@ -1,3 +1,4 @@
+import { ShopNavigation } from "~/components/shop-navigation";
 import { data, Form, Link, useActionData, useLoaderData, useNavigation } from "react-router";
 import { resolveSiteIdByHost } from "~/lib/site-resolution.server";
 import {
@@ -88,7 +89,7 @@ export default function Cart() {
 
   if (!loaderData.ready) {
     return (
-      <main className="storefront-page">
+      <main className="storefront-page"><ShopNavigation />
         <h1>Cart</h1>
         <p role="status">This store isn't set up yet: {loaderData.message}</p>
       </main>
@@ -97,7 +98,7 @@ export default function Cart() {
 
   if (loaderData.cartState === "unavailable") {
     return (
-      <main className="storefront-page">
+      <main className="storefront-page"><ShopNavigation />
         <h1>Cart</h1>
         <p role="alert">Could not load your cart right now: {loaderData.message}. Please try again.</p>
       </main>
@@ -106,7 +107,7 @@ export default function Cart() {
 
   if (loaderData.cartState === "empty") {
     return (
-      <main className="storefront-page">
+      <main className="storefront-page"><ShopNavigation />
         <h1>Cart</h1>
         <p>
           Your cart is empty. <Link to="/shop">Continue shopping</Link>
@@ -118,7 +119,7 @@ export default function Cart() {
   const { cart, currencyCode } = loaderData;
 
   return (
-    <main className="storefront-page">
+    <main className="storefront-page"><ShopNavigation />
       <h1>Cart</h1>
       <ul>
         {cart.items.map((item) => (

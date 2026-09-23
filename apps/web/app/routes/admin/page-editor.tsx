@@ -1,14 +1,16 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { useFetcher, useLoaderData, useNavigate } from "react-router";
-import { Puck, legacySideBarPlugin, usePuck, type Data } from "@puckeditor/core";
+import { createContext, useContext, useMemo, useEffect, useRef, useState, type ReactNode } from "react";
+import { redirect, useFetcher, useLoaderData, useNavigate } from "react-router";
+import { Puck, legacySideBarPlugin, createUsePuck, type Data } from "@puckeditor/core";
 import "@puckeditor/core/puck.css";
-import { componentConfig, type StorefrontMetadata } from "~/lib/component-registry/config";
+import { componentConfig, createEditorConfig, type StorefrontMetadata } from "~/lib/component-registry/config";
 import { validatePuckDocument } from "~/lib/component-registry/validate.server";
+import { siteAccess } from "~/lib/site-access.server";
+import { canonical } from "~/lib/page-model";
 import { createSupabaseServerClient } from "~/lib/supabase.server";
 import type { Route } from "./+types/page-editor";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
-  const { supabase } = createSupabaseServerClient(request);
+  const { supabase, canEdit } = await siteAccess(request, params.siteId!);
   const { data: page, error } = await supabase
     .from("pages")
     .select("id, site_id, slug, title, draft_document, draft_updated_at")
@@ -37,7 +39,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     mode: "preview",
   };
 
-  return { page, storefrontMetadata };
+  if (!canEdit) throw redirect(`/admin/sites/${page.site_id}/preview/${page.id}`);
+  return { page, storefrontMetadata, canEdit };
 }
 
 type ActionBody =
@@ -51,7 +54,11 @@ export async function action({ request, params }: Route.ActionArgs) {
   } = await supabase.auth.getUser();
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = (await request.json()) as ActionBody;
+  const { canEdit } = await siteAccess(request, params.siteId!);
+  if (!canEdit) return Response.json({ error: "Your role cannot edit pages." }, { status: 403 });
+  let body: ActionBody;
+  try { body = await request.json() as ActionBody; } catch { return Response.json({ error: "Invalid request." }, { status: 400 }); }
+  if (!body || body.intent !== "autosave") return Response.json({ error: "Use the site publishing review to publish." }, { status: 400 });
 
   // Confirm the page actually belongs to the site in the URL before
   // doing anything with it (see the loader for why this check exists
@@ -65,7 +72,7 @@ export async function action({ request, params }: Route.ActionArgs) {
     return Response.json({ error: "Page not found in this site" }, { status: 404 });
   }
 
-  if (body.intent === "autosave" || body.intent === "publish") {
+  if (body.intent === "autosave") {
     const validation = validatePuckDocument<Data>(body.document, componentConfig);
     if (!validation.ok) {
       return Response.json({ error: `Invalid document: ${validation.error}` }, { status: 400 });
@@ -89,24 +96,7 @@ export async function action({ request, params }: Route.ActionArgs) {
     if (error) return Response.json({ error: error.message }, { status: 500 });
     if (!data) return Response.json({ conflict: true }, { status: 409 });
 
-    if (body.intent === "autosave") {
-      return Response.json({ draftUpdatedAt: data.draft_updated_at });
-    }
-
-    // "publish" saves the draft above, then publishes the whole site
-    // (Part A SS10 — publishing is a site-level release, not a per-page
-    // action) via the same RPC the site page's Publish button uses.
-    const { data: release, error: publishError } = await supabase.rpc("publish_site", {
-      target_site_id: params.siteId!,
-      release_label: body.label,
-    });
-    if (publishError) {
-      return Response.json(
-        { draftUpdatedAt: data.draft_updated_at, publishError: publishError.message },
-        { status: 200 },
-      );
-    }
-    return Response.json({ draftUpdatedAt: data.draft_updated_at, published: true, releaseId: release?.id });
+    return Response.json({ draftUpdatedAt: data.draft_updated_at });
   }
 
   return Response.json({ error: "Unknown action" }, { status: 400 });
@@ -118,20 +108,37 @@ type SaveStatus = "idle" | "saving" | "saved" | "conflict" | "error" | "publishi
 
 const editorPlugins = [legacySideBarPlugin({ componentsLabel: "Add element", outlineLabel: "Layers" })];
 
+function isEmptyCanvas(data: Data) {
+  const rootContent = (data.root.props as { content?: unknown[] } | undefined)?.content;
+  return (data.content ?? []).length === 0 && (rootContent ?? []).length === 0;
+}
+
+const EmptyCanvasContext = createContext(false);
+const useEditorState = createUsePuck();
+
 function EditorPreview({ children }: { children: ReactNode }) {
-  const { appState, dispatch } = usePuck();
-  return <div className="editor-preview-surface">{children}{appState.data.content.length === 0 ? <div className="editor-empty"><div className="editor-empty-symbol" aria-hidden="true">▧</div><h2>Start building your page</h2><p>Add elements from the left panel, or start with a heading.</p><button className="btn" onClick={() => dispatch({ type: "insert", componentType: "Heading", destinationIndex: 0, destinationZone: "root:default-zone" })}>Add heading</button></div> : null}</div>;
+  const dispatch = useEditorState((state) => state.dispatch);
+  const empty = useContext(EmptyCanvasContext);
+  return <div className="editor-preview-surface">{children}{empty ? <div className="editor-empty"><div className="editor-empty-symbol" aria-hidden="true">▧</div><h2>Start building your page</h2><p>Add elements from the left panel, or start with a heading.</p><button className="btn" onClick={() => { dispatch({ type: "insert", componentType: "Heading", destinationIndex: 0, destinationZone: "root:content" }); dispatch({ type: "setUi", ui: { itemSelector: { index: 0, zone: "root:content" }, rightSideBarVisible: true } }); }}>Add heading</button></div> : null}</div>;
+}
+function QuickInsert() {
+  const [type, setType] = useState("Heading");
+  const dispatch = useEditorState(state => state.dispatch);
+  const count = useEditorState(state => ((state.appState.data.root.props as { content?: unknown[] } | undefined)?.content ?? []).length);
+  return <div className="quick-insert"><label htmlFor="quick-element">Add element</label><select id="quick-element" value={type} onChange={event => setType(event.target.value)}>{Object.entries(componentConfig.components).map(([key, component]) => <option key={key} value={key}>{component.label || key}</option>)}</select><button type="button" className="btn-secondary" onClick={() => { dispatch({ type: "insert", componentType: type, destinationZone: "root:content", destinationIndex: count }); dispatch({ type: "setUi", ui: { itemSelector: { index: count, zone: "root:content" }, rightSideBarVisible: true } }); }}>Insert element</button></div>;
 }
 const editorOverrides = {
-  headerActions: () => <span className="muted text-sm">Changes save as a private draft</span>,
+  headerActions: QuickInsert,
   preview: EditorPreview,
 };
 
 export default function PageEditor() {
-  const { page, storefrontMetadata } = useLoaderData<typeof loader>();
+  const { page, storefrontMetadata, canEdit } = useLoaderData<typeof loader>();
+  const editorConfig = useMemo(() => createEditorConfig(storefrontMetadata), [storefrontMetadata.siteId, storefrontMetadata.origin]);
   const fetcher = useFetcher();
   const navigate = useNavigate();
   const [mounted, setMounted] = useState(false);
+  const [emptyCanvas, setEmptyCanvas] = useState(isEmptyCanvas(page.draft_document as Data));
   const [status, setStatus] = useState<SaveStatus>("idle");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
@@ -143,6 +150,9 @@ export default function PageEditor() {
   // handleChange fires until a save actually lands, spanning any number
   // of debounce/in-flight/queued cycles in between.
   const dirtyRef = useRef(false);
+  const editVersionRef = useRef(0);
+  const submittedVersionRef = useRef(0);
+  const inFlightRef = useRef(false);
   // If handleChange (or a deliberate flush) happens while a submission
   // is already in flight, we don't fire a second concurrent request
   // (whose response could land out of order and stomp the newer
@@ -150,10 +160,12 @@ export default function PageEditor() {
   const queuedIntentRef = useRef<"autosave" | "publish" | null>(null);
   const leavingToRef = useRef<string | null>(null);
 
-  useEffect(() => setMounted(true), []);
+  useEffect(() => { setMounted(true); return () => { if (debounceRef.current) clearTimeout(debounceRef.current); }; }, []);
 
   function doSubmit(intent: "autosave" | "publish") {
     if (!latestDataRef.current) return;
+    inFlightRef.current = true;
+    submittedVersionRef.current = editVersionRef.current;
     setStatus(intent === "publish" ? "publishing" : "saving");
     fetcher.submit(
       {
@@ -167,6 +179,7 @@ export default function PageEditor() {
 
   useEffect(() => {
     if (fetcher.state !== "idle" || !fetcher.data) return;
+    inFlightRef.current = false;
     const result = fetcher.data as {
       conflict?: boolean;
       error?: string;
@@ -195,8 +208,9 @@ export default function PageEditor() {
     // A queued edit/intent arrived while this request was in flight —
     // it's still not persisted, so we're not clean yet; fire it now that
     // the previous request has settled, rather than losing it.
-    if (queuedIntentRef.current) {
-      const nextIntent = queuedIntentRef.current;
+    if (queuedIntentRef.current || submittedVersionRef.current !== editVersionRef.current) {
+      if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
+      const nextIntent = queuedIntentRef.current ?? "autosave";
       queuedIntentRef.current = null;
       doSubmit(nextIntent);
       return;
@@ -230,7 +244,7 @@ export default function PageEditor() {
       clearTimeout(debounceRef.current);
       debounceRef.current = null;
     }
-    if (fetcher.state !== "idle") {
+    if (inFlightRef.current) {
       // Something's already in flight — remember the strongest intent
       // (publish outranks a plain autosave) and let the effect above
       // fire it once that request settles.
@@ -241,26 +255,33 @@ export default function PageEditor() {
   }
 
   function handleChange(data: Data) {
+    if (!canEdit || canonical(data) === canonical(latestDataRef.current)) return;
+    editVersionRef.current += 1;
+    setEmptyCanvas(isEmptyCanvas(data));
     latestDataRef.current = data;
     dirtyRef.current = true;
+    if (status === "conflict") return;
     setStatus("saving");
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => flush("autosave"), AUTOSAVE_DEBOUNCE_MS);
   }
 
-  function handleBackClick(event: React.MouseEvent) {
-    event.preventDefault();
-    const to = `/admin/sites/${page.site_id}`;
-    if (dirtyRef.current || fetcher.state !== "idle") {
-      // Wait for the in-flight/queued save to actually land (confirmed
-      // clean, not just "a request was sent") before leaving — a fire-
-      // and-forget submit here would race the navigation and could lose
-      // the edit or hide a conflict/error the user never gets to see.
+  function leaveTo(to: string) {
+    if (status === "conflict") return;
+    if (dirtyRef.current || inFlightRef.current) {
       leavingToRef.current = to;
       flush("autosave");
-    } else {
-      navigate(to);
-    }
+    } else navigate(to);
+  }
+  function handleBackClick(event: React.MouseEvent) {
+    event.preventDefault();
+    leaveTo(`/admin/sites/${page.site_id}/pages`);
+  }
+  function downloadDraft() {
+    const blob = new Blob([JSON.stringify(latestDataRef.current, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a"); link.href = url; link.download = `${page.slug || "home"}-draft.json`; link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   // Best-effort only: browsers don't reliably wait for async work queued
@@ -270,7 +291,7 @@ export default function PageEditor() {
   // tab-close/refresh case, and warns the user rather than saying nothing.
   useEffect(() => {
     function onBeforeUnload(e: BeforeUnloadEvent) {
-      if (dirtyRef.current || fetcher.state !== "idle") {
+      if (dirtyRef.current || inFlightRef.current) {
         e.preventDefault();
       }
     }
@@ -295,34 +316,26 @@ export default function PageEditor() {
             {status === "publishing" && "Publishing…"}
             {status === "published" && "Published"}
           </span>
-          <button
-            type="button"
-            className="btn"
-            disabled={status === "publishing"}
-            onClick={() => {
-              // Publishing here publishes the WHOLE site (every page's
-              // current draft), not just this one — same as the site
-              // page's Publish button. Flush this page's own pending
-              // edit first so it's included.
-              if (window.confirm("Publish all page drafts in this site? This updates the live website, including changes on other pages.")) flush("publish");
-            }}
-          >
-            Publish site
-          </button>
+          <button className="btn-secondary" disabled={status === "conflict"} onClick={() => leaveTo(`/admin/sites/${page.site_id}/preview/${page.id}`)}>Preview</button>
+          {canEdit ? <button className="btn" disabled={status === "conflict" || fetcher.state !== "idle"} onClick={() => leaveTo(`/admin/sites/${page.site_id}/publishing`)}>Review & publish</button> : <span className="badge">Read-only</span>}
+
         </div>
       </div>
+      {status === "error" || status === "conflict" ? <div className="editor-recovery" role="alert"><span>{statusMessage}</span><button className="btn-secondary" onClick={downloadDraft}>Download my draft</button>{status === "error" ? <button className="btn-secondary" onClick={() => flush("autosave")}>Retry saving</button> : <button className="btn-secondary" onClick={() => { if (window.confirm("Reload the latest draft? Download your local changes first if you want to keep them.")) window.location.reload(); }}>Reload latest</button>}</div> : null}
       <div style={{ flex: 1, minHeight: 0, width: "100%", minWidth: 0 }}>
         {mounted ? (
-          <Puck
+          <EmptyCanvasContext.Provider value={emptyCanvas}><Puck
             headerTitle={page.title}
             overrides={editorOverrides}
             plugins={editorPlugins}
-            config={componentConfig}
+            permissions={{ edit: canEdit, insert: canEdit, delete: canEdit, duplicate: canEdit, drag: canEdit }}
+            config={editorConfig}
             data={page.draft_document as Data}
             metadata={storefrontMetadata}
             onChange={handleChange}
+            onAction={(_action, state, previous) => { if (canonical(state.data) !== canonical(previous.data)) handleChange(state.data); }}
 
-          />
+          /></EmptyCanvasContext.Provider>
         ) : (
           <p className="p-4 text-sm text-gray-600 dark:text-gray-400">Loading editor…</p>
         )}
