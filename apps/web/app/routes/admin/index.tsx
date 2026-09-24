@@ -151,7 +151,7 @@ export default function AdminOverview() {
                       <label htmlFor={`domain-${site.id}`}>Add domain</label>
                       <input id={`domain-${site.id}`} name="hostname" type="text" required placeholder="localhost" className="input" />
                     </div>
-                    <button type="submit" disabled={submitting} className="btn-secondary">
+                    <button type="submit" disabled={submitting} className="btn">
                       Add domain
                     </button>
                   </Form>
@@ -166,7 +166,7 @@ export default function AdminOverview() {
                 <label htmlFor={`site-${workspace.id}`}>New blank site name</label>
                 <input id={`site-${workspace.id}`} name="name" type="text" required className="input" />
               </div>
-              <button type="submit" disabled={submitting} className="btn-secondary">
+              <button type="submit" disabled={submitting} className="btn">
                 Create blank site
               </button>
             </Form>

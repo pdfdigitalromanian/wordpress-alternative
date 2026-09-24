@@ -30,3 +30,7 @@ supabase/.temp/
 .vscode/*
 !.vscode/extensions.json
 .idea/
+
+# Local scratch notes
+study.txt
+fix.txt
