@@ -10,6 +10,9 @@ export default [
   index("routes/site-page.tsx", { id: "site-page-index" }),
   route("login", "routes/login.tsx"),
   route("logout", "routes/logout.tsx"),
+  route("reset-password", "routes/reset-password.tsx"),
+  route("invitation", "routes/invitation.tsx"),
+  route("workspace", "routes/overview.tsx"),
   route("admin", "routes/admin/layout.tsx", [
     index("routes/admin/index.tsx"),
     route("sites/:siteId", "routes/admin/site.tsx"),

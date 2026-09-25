@@ -113,20 +113,351 @@ a, button, input, select, textarea, summary { outline-offset: 4px; }
 .empty-state > span { font-size: 36px; color: #8b8b81; }
 .empty-state h3 { font-size: 17px; font-weight: 550; margin: 14px 0 10px; }
 .empty-state p { font-size: 14px; color: #6d6d63; }
-.auth-page { min-height: 100dvh; background: #fffbf2; display: flex; flex-direction: column; align-items: center; padding: 48px 24px 24px; }
-.auth-brand { align-self: flex-start; }
-.auth-card { width: 100%; max-width: 420px; background: #fff; border: 1px solid #dedbd3; border-radius: 10px; padding: 36px; margin: auto 0; }
-.auth-card h1 { font-size: 30px; font-weight: 600; letter-spacing: -.035em; margin: 12px 0; }
-.auth-card > p { font-size: 14px; line-height: 1.7; }
-.auth-form { margin-top: 28px; }
-.auth-submit { width: 100%; justify-content: space-between; margin-top: 6px; }
-.password-field { display: flex; position: relative; }
-.password-field input { padding-right: 65px; }
-.password-field button { position: absolute; right: 0; top: 0; min-height: 44px; width: 60px; color: #78786f; display: flex; align-items: center; justify-content: center; }
-.password-field button:hover { color: #2b2b28; }
-.auth-help { border-top: 1px solid #e9e7e0; margin-top: 24px; padding-top: 20px; font-size: 13px; color: #626258; }
-.auth-help p { margin-top: 12px; line-height: 1.6; }
-.auth-footer { font-size: 12px; color: #77776c; padding-top: 32px; }
+/* ===== Auth (sign in / reset / invite) =====
+   Replaces the old .auth-page, .auth-brand, .auth-card, .auth-card h1,
+   .auth-card > p, .auth-form, .auth-submit, .auth-help, .auth-footer rules,
+   plus the .auth-page / .auth-card lines inside the 760px media query.
+   Measurements come from the Figma frame "01 - Staff Sign-in". */
+
+.auth-page {
+    min-height: 100dvh;
+    background: #fffbf2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 24px;
+}
+
+.auth-card {
+    width: 100%;
+    max-width: 775px;
+    min-height: 854px;
+    background: #fff;
+    border: 1px solid rgb(0 0 0 / .3);
+    border-radius: 24px;
+    padding: 22px 24px 64px;
+}
+
+.auth-inner {
+    max-width: 435px;
+    margin: 0 auto;
+}
+
+.auth-logo {
+    display: block;
+    width: 133px;
+    height: auto;
+    margin: 0 auto 31px;
+}
+
+.auth-card h1 {
+    font-size: 24px;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: 0;
+    color: #000;
+    margin: 0 0 8px;
+}
+
+.auth-lead {
+    font-size: 16px;
+    font-weight: 500;
+    line-height: 1.2;
+    color: #000;
+    margin: 0;
+}
+
+.auth-form {
+    margin-top: 40px;
+}
+
+.auth-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.auth-field label {
+    font-size: 16px;
+    font-weight: 500;
+    line-height: 1.2;
+    color: #000;
+}
+
+.auth-input {
+    width: 100%;
+    height: 54px;
+    padding: 10px 14px;
+    border: 2px solid rgb(0 0 0 / .2);
+    border-radius: 4px;
+    background: #fff;
+    font-size: 14px;
+    color: #191919;
+    transition: border-color .15s ease;
+}
+
+.auth-input::placeholder {
+    color: #8c8c83;
+}
+
+.auth-input:hover {
+    border-color: rgb(0 0 0 / .35);
+}
+
+.auth-input:focus {
+    border-color: #000;
+}
+
+.auth-password {
+    position: relative;
+}
+
+.auth-password .auth-input {
+    padding-right: 56px;
+}
+
+.auth-password button {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 54px;
+    height: 54px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: #78786f;
+}
+
+.auth-password button:hover {
+    color: #000;
+}
+
+.auth-submit {
+    width: 100%;
+    height: 60px;
+    margin-top: 6px;
+    background: #000;
+    color: #fff;
+    border: 1px solid #000;
+    border-radius: 4px;
+    font-size: 16px;
+    font-weight: 500;
+}
+
+.auth-submit:hover:not(:disabled) {
+    background: #30302c;
+}
+
+.auth-options {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 10px 0;
+}
+
+.auth-check {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: #000;
+    cursor: pointer;
+}
+
+.auth-check input {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    accent-color: #000;
+}
+
+.auth-link {
+    font-size: 13px;
+    font-weight: 500;
+    color: #000;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.auth-divider {
+    display: flex;
+    align-items: center;
+    gap: 55px;
+    padding: 10px;
+    margin: 37px 0 30px;
+    font-size: 14px;
+    color: #000;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: rgb(0 0 0 / .15);
+}
+
+.auth-google {
+    width: 100%;
+    height: 72px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 10px;
+    background: #fff;
+    border: 1px solid rgb(0 0 0 / .2);
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 500;
+    color: #000;
+}
+
+.auth-google:hover:not(:disabled) {
+    background: #f6f5ef;
+}
+
+.auth-footnote {
+    margin: 31px 0 0;
+    text-align: center;
+    font-size: 16px;
+    font-weight: 500;
+    line-height: 1.4;
+    color: #000;
+}
+
+@media (max-width: 760px) {
+    .auth-page {
+        align-items: flex-start;
+        padding: 24px 16px;
+    }
+
+    .auth-card {
+        min-height: calc(100dvh - 48px);
+        border-radius: 16px;
+        padding: 20px 20px 36px;
+    }
+
+    .auth-logo {
+        width: 104px;
+        margin-bottom: 24px;
+    }
+
+    .auth-card h1 {
+        font-size: 22px;
+    }
+
+    .auth-lead,
+    .auth-field label {
+        font-size: 15px;
+    }
+
+    .auth-form {
+        margin-top: 28px;
+    }
+
+    .auth-input {
+        height: 50px;
+        font-size: 16px;
+    }
+
+    /* 16px stops iOS zooming on focus */
+    .auth-password button {
+        width: 50px;
+        height: 50px;
+    }
+
+    .auth-submit {
+        height: 52px;
+    }
+
+    .auth-divider {
+        gap: 24px;
+        margin: 24px 0 20px;
+    }
+
+    .auth-google {
+        height: 56px;
+        font-size: 15px;
+    }
+
+    .auth-footnote {
+        margin-top: 24px;
+        font-size: 14px;
+    }
+}
+
+@media (max-width: 380px) {
+    .auth-card {
+        padding: 16px 16px 28px;
+        border-radius: 12px;
+    }
+}
+
+/* ===== Reset password / invite (from the reference screens) ===== */
+.auth-center { text-align: center; }
+.auth-center .auth-lead { max-width: 380px; margin: 0 auto; }
+
+.btn-primary, .btn-outline { width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 16px; font-weight: 500; text-decoration: none; }
+.btn-primary { height: 60px; background: #000; color: #fff; border: 1px solid #000; border-radius: 4px; }
+.btn-primary:hover:not(:disabled) { background: #30302c; }
+.btn-outline { height: 60px; background: #fff; color: #000; border: 1px solid rgb(0 0 0 / .3); border-radius: 4px; }
+.btn-outline:hover:not(:disabled) { background: #f6f5ef; }
+
+.reset-form { margin-top: 24px; }
+.back-link { display: inline-flex; align-items: center; gap: 6px; margin-top: 30px; font-size: 16px; font-weight: 500; color: #000; text-decoration: none; }
+.back-link:hover { text-decoration: underline; text-underline-offset: 4px; }
+.reset-sent { margin-top: 24px; }
+.reset-sent[hidden] { display: none; }
+
+/* Reset — measured from Figma frame "02 Password Recovery & Reset" (sits lower in the card than sign in) */
+.auth-reset { padding-top: 33px; }
+.auth-reset .auth-logo { margin-bottom: 77px; }
+.auth-reset h1 { font-size: 20px; line-height: 1.2; margin-bottom: 12px; }
+.auth-reset .auth-lead { font-size: 14px; font-weight: 500; line-height: 19px; max-width: 380px; }
+.auth-reset .reset-form { margin-top: 30px; }
+.auth-reset .auth-field { margin-bottom: 30px; }
+.auth-reset .auth-submit { margin-top: 0; }
+.auth-reset .back-link { margin-top: 34px; font-size: 15px; font-weight: 600; }
+.auth-reset .reset-sent { margin-top: 30px; }
+
+@media (max-width: 760px) {
+    .btn-primary, .btn-outline { height: 52px; }
+    .back-link { font-size: 15px; }
+    .auth-reset { padding-top: 16px; }
+    .auth-reset .auth-logo { margin-bottom: 44px; }
+    .auth-reset .reset-form { margin-top: 24px; }
+    .auth-reset .auth-field { margin-bottom: 20px; }
+    .auth-reset .back-link { margin-top: 28px; }
+}
+
+/* Invite */
+.invite-icon { width: 100px; height: 100px; margin: 0 auto 32px; border-radius: 50%; background: rgb(222 222 222 / .78); display: grid; place-items: center; color: #000; }
+.invite-details { width: 460px; margin: 28px auto 46px; background: #fffbf2; border: 1px solid rgb(0 0 0 / .15); border-radius: 12px; padding: 12px 20px; text-align: left; position: relative; left: 50%; transform: translateX(-50%); }
+.invite-details div { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 12px 0; font-size: 14px; }
+.invite-details dt { color: #000; }
+.invite-details dd { margin: 0; color: #000; font-weight: 500; }
+.invite-actions { display: grid; gap: 26px; }
+.invite-actions .btn-primary, .invite-actions .btn-outline { height: 46px; font-size: 14px; }
+.invite-expiry { margin-top: 36px; text-align: center; font-size: 14px; color: #000; }
+.invite-declined { margin-top: 24px; }
+.invite-declined[hidden] { display: none; }
+
+@media (max-width: 760px) {
+    .invite-icon { width: 80px; height: 80px; margin-bottom: 24px; }
+    .invite-icon .mail { width: 32px; height: 32px; }
+    .invite-details { width: 100%; left: 0; transform: none; margin: 24px 0 32px; padding: 8px 16px; }
+    .invite-details div { grid-template-columns: 1fr; gap: 4px; }
+    .invite-details dt { font-size: 13px; color: #696963; }
+    .invite-actions { gap: 12px; }
+    .invite-actions .btn-primary, .invite-actions .btn-outline { height: 50px; }
+    .invite-expiry { margin-top: 24px; }
+}
 .skip-link { position: fixed; top: -80px; left: 20px; z-index: 100; background: white; padding: 12px; }
 .skip-link:focus { top: 12px; }
 .editor-topbar { display: flex; justify-content: space-between; align-items: center; padding: 12px 24px; gap: 16px; background: #fffbf2; border-bottom: 1px solid #d4d1c8; min-height: 64px; font-size: 14px; }
