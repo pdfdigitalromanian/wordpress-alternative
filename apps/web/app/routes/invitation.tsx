@@ -12,7 +12,7 @@ export default function Invitation() {
   return (
     <main className="auth-page">
       <div className="auth-card">
-        <div className="auth-inner auth-center">
+        <div className="auth-inner auth-center auth-invite">
           <img className="auth-logo" src="/digital-romanian.png" alt="Digital Romanian" width={133} height={116} />
 
           <div className="invite-icon" aria-hidden="true">
@@ -20,7 +20,7 @@ export default function Invitation() {
           </div>
 
           <h1 tabIndex={-1}>You&apos;ve been invited!</h1>
-          <p className="auth-lead" style={{ fontSize: 14, fontWeight: 400 }}>Alex Radu <strong>has invited you</strong> to join the Digital Romanian workspace.</p>
+          <p className="auth-lead">Alex Radu <strong>has invited you</strong> to join the Digital Romanian workspace.</p>
 
           <div hidden={declined}>
             <dl className="invite-details">

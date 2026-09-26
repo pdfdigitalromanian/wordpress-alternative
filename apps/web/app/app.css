@@ -3,14 +3,15 @@
 @theme {
   --font-sans: "Inter", "Arial", ui-sans-serif, system-ui, sans-serif;
 }
-:root { color-scheme: light; font-family: var(--font-sans); color: #191919; background: #fff; font-synthesis: none; }
+:root { color-scheme: light; font-family: var(--font-sans); color: #191919; background: #fff; font-synthesis: none; --cream: #fffbf2; --ink: #000; --text: #191919; --muted: #696963; --line: #e4e2dc; --hover: #f5f5f5; --focus: #147d64; }
 body { margin: 0; }
 * { box-sizing: border-box; }
 button, input, select, textarea { font: inherit; }
 button, summary { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .5; }
 a, button, input, select, textarea, summary { outline-offset: 4px; }
-:focus-visible { outline: 2px solid #147d64; }
+:focus-visible { outline: 2px solid var(--focus); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .muted { color: #696963; }
 .eyebrow { display: block; font-size: 12px; font-weight: 500; letter-spacing: .055em; color: #73736d; margin-bottom: 10px; }
 .brand { display: flex; gap: 12px; align-items: center; font-size: 17px; font-weight: 650; line-height: 1.3; }
@@ -113,351 +114,219 @@ a, button, input, select, textarea, summary { outline-offset: 4px; }
 .empty-state > span { font-size: 36px; color: #8b8b81; }
 .empty-state h3 { font-size: 17px; font-weight: 550; margin: 14px 0 10px; }
 .empty-state p { font-size: 14px; color: #6d6d63; }
-/* ===== Auth (sign in / reset / invite) =====
-   Replaces the old .auth-page, .auth-brand, .auth-card, .auth-card h1,
-   .auth-card > p, .auth-form, .auth-submit, .auth-help, .auth-footer rules,
-   plus the .auth-page / .auth-card lines inside the 760px media query.
-   Measurements come from the Figma frame "01 - Staff Sign-in". */
-
+/* ---------- Auth screens (sign in / reset / invite) ----------
+   The card is sized by its content (no fixed 854px height). Every vertical
+   measurement comes from the tokens on .auth-page, and those tokens step down
+   with viewport HEIGHT, so the card fits a laptop screen instead of spilling
+   past the fold. The card is centred with margin:auto, which keeps its top
+   reachable (it scrolls normally) if a screen is shorter still. */
 .auth-page {
-    min-height: 100dvh;
-    background: #fffbf2;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 60px 24px;
+  --page-pad: 48px;
+  --card-pad: 40px;
+  --logo-w: 116px;
+  --logo-gap: 24px;
+  --section-gap: 32px;
+  --field-gap: 16px;
+  --control-h: 54px;
+  --social-h: 52px;
+  --social-gap: 12px;
+  min-height: 100dvh; display: flex; flex-direction: column;
+  padding: var(--page-pad) 24px; background: var(--cream);
 }
-
-.auth-card {
-    width: 100%;
-    max-width: 775px;
-    min-height: 854px;
-    background: #fff;
-    border: 1px solid rgb(0 0 0 / .3);
-    border-radius: 24px;
-    padding: 22px 24px 64px;
-}
-
-.auth-inner {
-    max-width: 435px;
-    margin: 0 auto;
-}
-
-.auth-logo {
-    display: block;
-    width: 133px;
-    height: auto;
-    margin: 0 auto 31px;
-}
-
-.auth-card h1 {
-    font-size: 24px;
-    font-weight: 600;
-    line-height: 1.2;
-    letter-spacing: 0;
-    color: #000;
-    margin: 0 0 8px;
-}
-
-.auth-lead {
-    font-size: 16px;
-    font-weight: 500;
-    line-height: 1.2;
-    color: #000;
-    margin: 0;
-}
-
-.auth-form {
-    margin-top: 40px;
-}
-
-.auth-field {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-bottom: 16px;
-}
-
-.auth-field label {
-    font-size: 16px;
-    font-weight: 500;
-    line-height: 1.2;
-    color: #000;
-}
-
-.auth-input {
-    width: 100%;
-    height: 54px;
-    padding: 10px 14px;
-    border: 2px solid rgb(0 0 0 / .2);
-    border-radius: 4px;
-    background: #fff;
-    font-size: 14px;
-    color: #191919;
-    transition: border-color .15s ease;
-}
-
-.auth-input::placeholder {
-    color: #8c8c83;
-}
-
-.auth-input:hover {
-    border-color: rgb(0 0 0 / .35);
-}
-
-.auth-input:focus {
-    border-color: #000;
-}
-
-.auth-password {
-    position: relative;
-}
-
-.auth-password .auth-input {
-    padding-right: 56px;
-}
-
-.auth-password button {
-    position: absolute;
-    top: 0;
-    right: 0;
-    width: 54px;
-    height: 54px;
-    display: grid;
-    place-items: center;
-    padding: 0;
-    border: 0;
-    background: none;
-    color: #78786f;
-}
-
-.auth-password button:hover {
-    color: #000;
-}
-
-.auth-submit {
-    width: 100%;
-    height: 60px;
-    margin-top: 6px;
-    background: #000;
-    color: #fff;
-    border: 1px solid #000;
-    border-radius: 4px;
-    font-size: 16px;
-    font-weight: 500;
-}
-
-.auth-submit:hover:not(:disabled) {
-    background: #30302c;
-}
-
-.auth-options {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 12px;
-    padding: 10px 0;
-}
-
-.auth-check {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 13px;
-    color: #000;
-    cursor: pointer;
-}
-
-.auth-check input {
-    width: 16px;
-    height: 16px;
-    margin: 0;
-    accent-color: #000;
-}
-
-.auth-link {
-    font-size: 13px;
-    font-weight: 500;
-    color: #000;
-    text-decoration: underline;
-    text-underline-offset: 3px;
-}
-
-.auth-divider {
-    display: flex;
-    align-items: center;
-    gap: 55px;
-    padding: 10px;
-    margin: 37px 0 30px;
-    font-size: 14px;
-    color: #000;
-}
-
-.auth-divider::before,
-.auth-divider::after {
-    content: "";
-    flex: 1;
-    height: 1px;
-    background: rgb(0 0 0 / .15);
-}
-
-.auth-google {
-    width: 100%;
-    height: 72px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    padding: 10px;
-    background: #fff;
-    border: 1px solid rgb(0 0 0 / .2);
-    border-radius: 8px;
-    font-size: 16px;
-    font-weight: 500;
-    color: #000;
-}
-
-.auth-google:hover:not(:disabled) {
-    background: #f6f5ef;
-}
-
-.auth-footnote {
-    margin: 31px 0 0;
-    text-align: center;
-    font-size: 16px;
-    font-weight: 500;
-    line-height: 1.4;
-    color: #000;
-}
-
-@media (max-width: 760px) {
-    .auth-page {
-        align-items: flex-start;
-        padding: 24px 16px;
-    }
-
-    .auth-card {
-        min-height: calc(100dvh - 48px);
-        border-radius: 16px;
-        padding: 20px 20px 36px;
-    }
-
-    .auth-logo {
-        width: 104px;
-        margin-bottom: 24px;
-    }
-
-    .auth-card h1 {
-        font-size: 22px;
-    }
-
-    .auth-lead,
-    .auth-field label {
-        font-size: 15px;
-    }
-
-    .auth-form {
-        margin-top: 28px;
-    }
-
-    .auth-input {
-        height: 50px;
-        font-size: 16px;
-    }
-
-    /* 16px stops iOS zooming on focus */
-    .auth-password button {
-        width: 50px;
-        height: 50px;
-    }
-
-    .auth-submit {
-        height: 52px;
-    }
-
-    .auth-divider {
-        gap: 24px;
-        margin: 24px 0 20px;
-    }
-
-    .auth-google {
-        height: 56px;
-        font-size: 15px;
-    }
-
-    .auth-footnote {
-        margin-top: 24px;
-        font-size: 14px;
-    }
-}
-
-@media (max-width: 380px) {
-    .auth-card {
-        padding: 16px 16px 28px;
-        border-radius: 12px;
-    }
-}
-
-/* ===== Reset password / invite (from the reference screens) ===== */
+/* Card hugs the form column (435px + side padding) instead of floating it in a 775px box */
+.auth-card { width: 100%; max-width: 516px; margin: auto; background: #fff; border: 1px solid rgb(0 0 0 / .12); border-radius: 20px; padding: var(--card-pad) 40px; box-shadow: 0 1px 2px rgb(0 0 0 / .04), 0 12px 32px -12px rgb(0 0 0 / .12); }
+.auth-inner { max-width: 435px; margin: 0 auto; }
+.auth-logo { display: block; width: var(--logo-w); height: auto; margin: 0 auto var(--logo-gap); }
+.auth-card h1 { font-size: 24px; font-weight: 600; line-height: 1.2; color: var(--ink); margin: 0 0 8px; }
+.auth-lead { font-size: 16px; font-weight: 500; line-height: 1.3; color: var(--ink); }
 .auth-center { text-align: center; }
 .auth-center .auth-lead { max-width: 380px; margin: 0 auto; }
 
-.btn-primary, .btn-outline { width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 16px; font-weight: 500; text-decoration: none; }
-.btn-primary { height: 60px; background: #000; color: #fff; border: 1px solid #000; border-radius: 4px; }
-.btn-primary:hover:not(:disabled) { background: #30302c; }
-.btn-outline { height: 60px; background: #fff; color: #000; border: 1px solid rgb(0 0 0 / .3); border-radius: 4px; }
-.btn-outline:hover:not(:disabled) { background: #f6f5ef; }
+.auth-form { margin-top: var(--section-gap); }
+.auth-field { display: flex; flex-direction: column; gap: 8px; margin-bottom: var(--field-gap); }
+.auth-field label { font-size: 16px; font-weight: 500; line-height: 1.2; color: var(--ink); }
+.auth-input { width: 100%; height: var(--control-h); padding: 10px 14px; border: 2px solid rgb(0 0 0 / .2); border-radius: 4px; background: #fff; font-size: 14px; color: var(--text); transition: border-color .15s ease; }
+.auth-input::placeholder { color: #8c8c83; font-size: 12px; }
+.auth-input:hover { border-color: rgb(0 0 0 / .35); }
+.auth-input:focus { border-color: var(--ink); }
+.auth-password { position: relative; }
+.auth-password .auth-input { padding-right: 56px; }
+.auth-password button { position: absolute; top: 0; right: 0; width: var(--control-h); height: var(--control-h); display: grid; place-items: center; color: #78786f; }
+.auth-password button:hover { color: var(--ink); }
 
-.reset-form { margin-top: 24px; }
-.back-link { display: inline-flex; align-items: center; gap: 6px; margin-top: 30px; font-size: 16px; font-weight: 500; color: #000; text-decoration: none; }
+.btn-primary, .btn-outline { width: 100%; height: var(--control-h); display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 16px; font-weight: 500; text-decoration: none; border-radius: 4px; }
+.btn-primary { background: var(--ink); color: #fff; border: 1px solid var(--ink); }
+.btn-primary:hover:not(:disabled) { background: #30302c; }
+.btn-outline { background: #fff; color: var(--ink); border: 1px solid rgb(0 0 0 / .3); }
+.btn-outline:hover:not(:disabled) { background: #f6f5ef; }
+.auth-submit { margin-top: 4px; }
+
+.auth-options { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 10px 0 0; }
+.auth-check { display: flex; align-items: center; gap: 10px; font-size: 12px; font-weight: 500; color: var(--ink); cursor: pointer; }
+.auth-check input { width: 16px; height: 16px; margin: 0; accent-color: var(--ink); }
+.auth-link { font-size: 12px; font-weight: 500; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+
+.auth-divider { display: flex; align-items: center; gap: 40px; margin: calc(var(--section-gap) * .75) 0; font-size: 14px; font-weight: 500; color: var(--ink); }
+.auth-divider::before, .auth-divider::after { content: ""; flex: 1; height: 1px; background: rgb(0 0 0 / .15); }
+
+/* Social sign-in: one row of three icon-only buttons */
+.auth-socials { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--social-gap); }
+.auth-social { height: var(--social-h); display: flex; align-items: center; justify-content: center; gap: 10px; padding: 0 12px; background: #fff; border: 1px solid rgb(0 0 0 / .2); border-radius: 8px; font-size: 15px; font-weight: 500; color: var(--ink); text-decoration: none; white-space: nowrap; min-width: 0; }
+.auth-social:hover { background: #f6f5ef; }
+.auth-social svg { flex-shrink: 0; }
+.auth-socials form { min-width: 0; }
+.auth-socials button.auth-social { width: 100%; }
+.auth-footnote { margin-top: calc(var(--section-gap) * .75); text-align: center; font-size: 15px; font-weight: 500; line-height: 1.4; color: var(--ink); }
+
+.alert-error, .alert-success { border-radius: 6px; padding: 12px 14px; font-size: 14px; line-height: 1.5; margin: 0 0 var(--field-gap); }
+.alert-error { color: #912d25; background: #fff0ed; border: 1px solid #e5b2ac; }
+.alert-success { color: #186244; background: #eaf5ee; border: 1px solid #bad6c5; text-align: left; }
+
+/* Reset (shared bits; sizes are pinned in the "Reset password" block at the end) */
+.back-link { display: inline-flex; align-items: center; gap: 6px; margin-top: var(--section-gap); font-size: 16px; font-weight: 600; color: var(--ink); text-decoration: none; }
 .back-link:hover { text-decoration: underline; text-underline-offset: 4px; }
-.reset-sent { margin-top: 24px; }
 .reset-sent[hidden] { display: none; }
 
-/* Reset — measured from Figma frame "02 Password Recovery & Reset" (sits lower in the card than sign in) */
-.auth-reset { padding-top: 33px; }
-.auth-reset .auth-logo { margin-bottom: 77px; }
-.auth-reset h1 { font-size: 20px; line-height: 1.2; margin-bottom: 12px; }
-.auth-reset .auth-lead { font-size: 14px; font-weight: 500; line-height: 19px; max-width: 380px; }
-.auth-reset .reset-form { margin-top: 30px; }
-.auth-reset .auth-field { margin-bottom: 30px; }
-.auth-reset .auth-submit { margin-top: 0; }
-.auth-reset .back-link { margin-top: 34px; font-size: 15px; font-weight: 600; }
-.auth-reset .reset-sent { margin-top: 30px; }
-
-@media (max-width: 760px) {
-    .btn-primary, .btn-outline { height: 52px; }
-    .back-link { font-size: 15px; }
-    .auth-reset { padding-top: 16px; }
-    .auth-reset .auth-logo { margin-bottom: 44px; }
-    .auth-reset .reset-form { margin-top: 24px; }
-    .auth-reset .auth-field { margin-bottom: 20px; }
-    .auth-reset .back-link { margin-top: 28px; }
-}
-
 /* Invite */
-.invite-icon { width: 100px; height: 100px; margin: 0 auto 32px; border-radius: 50%; background: rgb(222 222 222 / .78); display: grid; place-items: center; color: #000; }
-.invite-details { width: 460px; margin: 28px auto 46px; background: #fffbf2; border: 1px solid rgb(0 0 0 / .15); border-radius: 12px; padding: 12px 20px; text-align: left; position: relative; left: 50%; transform: translateX(-50%); }
-.invite-details div { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 12px 0; font-size: 14px; }
-.invite-details dt { color: #000; }
-.invite-details dd { margin: 0; color: #000; font-weight: 500; }
-.invite-actions { display: grid; gap: 26px; }
-.invite-actions .btn-primary, .invite-actions .btn-outline { height: 46px; font-size: 14px; }
-.invite-expiry { margin-top: 36px; text-align: center; font-size: 14px; color: #000; }
-.invite-declined { margin-top: 24px; }
+.auth-invite .auth-logo { margin-bottom: calc(var(--logo-gap) * .75); }
+.invite-icon { --icon: 88px; width: var(--icon); height: var(--icon); margin: 0 auto var(--logo-gap); border-radius: 50%; background: rgb(222 222 222 / .78); display: grid; place-items: center; color: var(--ink); }
+.invite-icon .mail { width: calc(var(--icon) * .4); height: auto; }
+.auth-invite h1 { font-size: 20px; margin-bottom: 12px; }
+.auth-invite .auth-lead { line-height: 1.25; max-width: 345px; }
+.auth-invite .auth-lead strong { font-weight: 700; }
+.invite-details { margin: var(--section-gap) 0; background: var(--cream); border: 1px solid rgb(0 0 0 / .15); border-radius: 12px; padding: 6px 24px; text-align: left; }
+.invite-details div { display: grid; grid-template-columns: 150px 1fr; align-items: center; gap: 12px; min-height: calc(var(--control-h) - 8px); font-size: 15px; }
+.invite-details div + div { border-top: 1px solid rgb(0 0 0 / .06); }
+.invite-details dt, .invite-details dd { color: var(--ink); font-weight: 500; margin: 0; }
+.invite-details dt { color: var(--muted); }
+.invite-actions { display: grid; gap: 12px; }
+.invite-expiry { margin-top: calc(var(--section-gap) * .75); text-align: center; font-size: 14px; font-weight: 500; color: var(--muted); }
+.invite-declined { margin-top: var(--section-gap); }
 .invite-declined[hidden] { display: none; }
 
-@media (max-width: 760px) {
-    .invite-icon { width: 80px; height: 80px; margin-bottom: 24px; }
-    .invite-icon .mail { width: 32px; height: 32px; }
-    .invite-details { width: 100%; left: 0; transform: none; margin: 24px 0 32px; padding: 8px 16px; }
-    .invite-details div { grid-template-columns: 1fr; gap: 4px; }
-    .invite-details dt { font-size: 13px; color: #696963; }
-    .invite-actions { gap: 12px; }
-    .invite-actions .btn-primary, .invite-actions .btn-outline { height: 50px; }
-    .invite-expiry { margin-top: 24px; }
+/* ---- Height tiers: the real fix for "cuts off below 900px" ---- */
+@media (max-height: 920px) {
+  .auth-page { --page-pad: 24px; --card-pad: 28px; --logo-w: 88px; --logo-gap: 16px; --section-gap: 24px; --field-gap: 12px; --control-h: 48px; --social-h: 46px; --social-gap: 10px; }
+  .auth-field { gap: 6px; }
+  .auth-field label { font-size: 15px; }
+  .invite-icon { --icon: 64px; }
 }
+/* Typical laptop (1366×768 / 1440×900 minus browser chrome) and landscape tablets */
+@media (max-height: 780px) {
+  .auth-page { --page-pad: 16px; --card-pad: 20px; --logo-w: 64px; --logo-gap: 12px; --section-gap: 18px; --field-gap: 10px; --control-h: 44px; --social-h: 44px; --social-gap: 8px; }
+  .auth-card { border-radius: 16px; padding-left: 32px; padding-right: 32px; }
+  .auth-card h1, .auth-invite h1 { font-size: 20px; margin-bottom: 4px; }
+  .auth-lead { font-size: 14px; }
+  .auth-divider { font-size: 13px; }
+  .auth-footnote { font-size: 14px; }
+  .invite-icon { --icon: 48px; }
+  .invite-details div { min-height: 38px; font-size: 14px; }
+  /* Decline | Accept side by side */
+  .invite-actions { grid-template-columns: 1fr 1fr; }
+  .invite-actions .btn-outline { order: -1; }
+}
+/* Very short (landscape phones, zoomed browsers): drop decoration, allow scroll */
+@media (max-height: 560px) {
+  .auth-page { --logo-w: 48px; --section-gap: 14px; }
+  .invite-icon { display: none; }
+}
+
+/* ---- Width tier ---- */
+@media (max-width: 760px) {
+  .auth-page { padding-left: 16px; padding-right: 16px; }
+  .auth-card { border-radius: 16px; padding-left: 20px; padding-right: 20px; }
+  .auth-input { font-size: 16px; } /* stops iOS zooming into the field */
+  .auth-divider { gap: 20px; }
+  .invite-details { padding: 4px 16px; }
+  .invite-details div { grid-template-columns: 96px 1fr; }
+}
+@media (max-width: 380px) {
+  .auth-card { padding-left: 16px; padding-right: 16px; border-radius: 12px; }
+  .auth-options { justify-content: flex-start; }
+  .invite-details div { grid-template-columns: 1fr; gap: 0; padding: 6px 0; }
+}
+
+/* ---- Reset password: original Figma content, unchanged at every screen height.
+   Only the card around it adapts (no fixed height, padding from the tokens above). ---- */
+.auth-card .auth-reset { padding-top: 33px; }
+.auth-card .auth-reset .auth-logo { margin: 0 auto 77px; }
+.auth-card .auth-reset h1 { font-size: 20px; line-height: 1.2; margin-bottom: 12px; }
+.auth-card .auth-reset .auth-lead { font-size: 16px; font-weight: 500; line-height: 19px; max-width: 390px; }
+.auth-card .auth-reset .reset-form { margin-top: 30px; }
+.auth-card .auth-reset .auth-field { gap: 8px; margin-bottom: 30px; }
+.auth-card .auth-reset .auth-field label { font-size: 16px; }
+.auth-card .auth-reset .auth-input { height: 54px; }
+.auth-card .auth-reset .btn-primary, .auth-card .auth-reset .btn-outline { height: 60px; }
+.auth-card .auth-reset .auth-submit { margin-top: 0; }
+.auth-card .auth-reset .alert-error, .auth-card .auth-reset .alert-success { padding: 14px 16px; margin: 0 0 16px; }
+.auth-card .auth-reset .reset-sent { margin-top: 30px; }
+.auth-card .auth-reset .back-link { margin-top: 34px; font-size: 16px; font-weight: 600; }
+@media (max-width: 760px) {
+  .auth-card .auth-reset { padding-top: 16px; }
+  .auth-card .auth-reset .auth-logo { margin-bottom: 44px; }
+  .auth-card .auth-reset h1 { font-size: 22px; }
+  .auth-card .auth-reset .auth-lead, .auth-card .auth-reset .auth-field label { font-size: 15px; }
+  .auth-card .auth-reset .reset-form { margin-top: 24px; }
+  .auth-card .auth-reset .auth-field { margin-bottom: 20px; }
+  .auth-card .auth-reset .auth-input { height: 50px; }
+  .auth-card .auth-reset .btn-primary, .auth-card .auth-reset .btn-outline { height: 52px; }
+  .auth-card .auth-reset .back-link { margin-top: 28px; font-size: 15px; }
+}
+
+/* ---- Accept invitation: roomier spacing, tuned per screen height so it breathes
+   but still fits. Card padding is bumped here too so content isn't hugging the edge. ---- */
+.auth-card:has(.auth-invite) { padding-top: 44px; padding-bottom: 44px; }
+.auth-card .auth-invite .auth-logo { margin: 0 auto 28px; }
+.auth-card .auth-invite .invite-icon { --icon: 80px; margin-bottom: 28px; }
+.auth-card .auth-invite h1 { font-size: 22px; line-height: 1.25; margin-bottom: 10px; }
+.auth-card .auth-invite .auth-lead { font-size: 16px; line-height: 1.45; max-width: 340px; }
+.auth-card .auth-invite .invite-details { margin: 32px 0; padding: 8px 24px; }
+.auth-card .auth-invite .invite-details div { min-height: 52px; font-size: 15px; }
+.auth-card .auth-invite .invite-actions { grid-template-columns: 1fr; gap: 12px; }
+.auth-card .auth-invite .invite-actions .btn-outline { order: 0; }
+.auth-card .auth-invite .btn-primary, .auth-card .auth-invite .btn-outline { height: 52px; }
+.auth-card .auth-invite .invite-expiry { margin-top: 24px; font-size: 14px; }
+.auth-card .auth-invite .invite-declined { margin-top: 32px; }
+
+@media (max-height: 920px) {
+  .auth-card:has(.auth-invite) { padding-top: 36px; padding-bottom: 36px; }
+  .auth-card .auth-invite .auth-logo { margin-bottom: 24px; }
+  .auth-card .auth-invite .invite-icon { --icon: 68px; margin-bottom: 24px; }
+  .auth-card .auth-invite .invite-details { margin: 28px 0; }
+  .auth-card .auth-invite .invite-details div { min-height: 48px; }
+  .auth-card .auth-invite .btn-primary, .auth-card .auth-invite .btn-outline { height: 48px; }
+}
+@media (max-height: 780px) {
+  .auth-card:has(.auth-invite) { padding-top: 28px; padding-bottom: 28px; }
+  .auth-card .auth-invite .auth-logo { margin-bottom: 20px; }
+  .auth-card .auth-invite .invite-icon { --icon: 56px; margin-bottom: 20px; }
+  .auth-card .auth-invite h1 { font-size: 20px; margin-bottom: 8px; }
+  .auth-card .auth-invite .auth-lead { font-size: 15px; }
+  .auth-card .auth-invite .invite-details { margin: 24px 0; padding: 6px 20px; }
+  .auth-card .auth-invite .invite-details div { min-height: 44px; font-size: 14px; }
+  /* Decline | Accept side by side to save a row */
+  .auth-card .auth-invite .invite-actions { grid-template-columns: 1fr 1fr; }
+  .auth-card .auth-invite .invite-actions .btn-outline { order: -1; }
+  .auth-card .auth-invite .btn-primary, .auth-card .auth-invite .btn-outline { height: 46px; }
+  .auth-card .auth-invite .invite-expiry { margin-top: 20px; }
+}
+@media (max-height: 600px) {
+  .auth-card:has(.auth-invite) { padding-top: 20px; padding-bottom: 20px; }
+  .auth-card .auth-invite .invite-icon { display: none; }
+  .auth-card .auth-invite .auth-logo { margin-bottom: 14px; }
+  .auth-card .auth-invite .invite-details { margin: 16px 0; }
+  .auth-card .auth-invite .invite-details div { min-height: 38px; }
+}
+@media (max-width: 380px) {
+  .auth-card .auth-invite .invite-details div { grid-template-columns: 1fr; gap: 0; min-height: 0; padding: 8px 0; }
+}
+
+/* ---- Logo: same size on sign in, reset and invite, stepping down with screen height ---- */
+.auth-card .auth-inner .auth-logo { width: 150px; }
+.auth-card .auth-signin .auth-logo { margin-bottom: 24px; }
+@media (max-height: 920px) { .auth-card .auth-inner .auth-logo { width: 124px; } .auth-card .auth-signin .auth-logo { margin-bottom: 18px; } }
+@media (max-height: 780px) { .auth-card .auth-inner .auth-logo { width: 100px; } .auth-card .auth-signin .auth-logo { margin-bottom: 14px; } }
+@media (max-height: 600px) { .auth-card .auth-inner .auth-logo { width: 72px; } .auth-card .auth-signin .auth-logo { margin-bottom: 10px; } }
 .skip-link { position: fixed; top: -80px; left: 20px; z-index: 100; background: white; padding: 12px; }
 .skip-link:focus { top: 12px; }
 .editor-topbar { display: flex; justify-content: space-between; align-items: center; padding: 12px 24px; gap: 16px; background: #fffbf2; border-bottom: 1px solid #d4d1c8; min-height: 64px; font-size: 14px; }

@@ -65,11 +65,27 @@ function EyeIcon({ open }: { open: boolean }) {
 
 function GoogleIcon() {
   return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path fill="#FFC107" d="M23.7666 9.6498H22.8V9.6H12V14.4H18.7818C17.7924 17.1942 15.1338 19.2 12 19.2C8.0238 19.2 4.8 15.9762 4.8 12C4.8 8.0238 8.0238 4.8 12 4.8C13.8354 4.8 15.5052 5.4924 16.7766 6.6234L20.1708 3.2292C18.0276 1.2318 15.1608 0 12 0C5.373 0 0 5.373 0 12C0 18.627 5.373 24 12 24C18.627 24 24 18.627 24 12C24 11.1954 23.9172 10.41 23.7666 9.6498Z" />
       <path fill="#FF3D00" d="M1.38354 6.4146L5.32614 9.306C6.39294 6.6648 8.97655 4.8 11.9999 4.8C13.8353 4.8 15.5051 5.4924 16.7765 6.6234L20.1707 3.2292C18.0275 1.2318 15.1607 0 11.9999 0C7.39075 0 3.39354 2.6022 1.38354 6.4146Z" />
       <path fill="#4CAF50" d="M12.0001 24C15.0997 24 17.9161 22.8138 20.0455 20.8848L16.3315 17.742C15.1267 18.6546 13.6291 19.2 12.0001 19.2C8.87894 19.2 6.22874 17.2098 5.23034 14.4324L1.31714 17.4474C3.30314 21.3336 7.33634 24 12.0001 24Z" />
       <path fill="#1976D2" d="M23.7666 9.6499H22.8V9.6001H12V14.4001H18.7818C18.3066 15.7423 17.4432 16.8997 16.3296 17.7427L16.3314 17.7415L20.0454 20.8843C19.7826 21.1231 24 18.0001 24 12.0001C24 11.1955 23.9172 10.4101 23.7666 9.6499Z" />
+    </svg>
+  );
+}
+
+function FacebookIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path fill="#0866FF" d="M9.101 23.691v-7.98H6.627v-3.667h2.474v-1.58c0-4.085 1.848-5.978 5.858-5.978.401 0 .955.042 1.468.103a8.68 8.68 0 0 1 1.141.195v3.325a8.623 8.623 0 0 0-.653-.036 26.805 26.805 0 0 0-.733-.009c-.707 0-1.259.096-1.675.309a1.686 1.686 0 0 0-.679.622c-.258.42-.374.995-.374 1.752v1.297h3.919l-.386 2.103-.287 1.564h-3.246v8.245C19.396 23.238 24 18.179 24 12.044c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.628 3.874 10.35 9.101 11.647Z" />
+    </svg>
+  );
+}
+
+function AppleIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path fill="currentColor" d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701" />
     </svg>
   );
 }
@@ -86,7 +102,7 @@ export default function Login() {
   return (
     <main className="auth-page">
       <section className="auth-card" aria-labelledby="auth-title">
-        <div className="auth-inner">
+        <div className="auth-inner auth-signin">
           <img className="auth-logo" src="/digital-romanian.png" alt="Digital Romanian" width={133} height={116} />
 
           <h1 id="auth-title">Welcome back</h1>
@@ -104,7 +120,7 @@ export default function Login() {
               <label htmlFor="password">Password</label>
               <div className="auth-password">
                 <input id="password" name="password" type={visible ? "text" : "password"} autoComplete="current-password" required className="auth-input" placeholder="Enter your password" />
-                <button type="button" onClick={() => setVisible(!visible)} aria-pressed={visible} aria-label={visible ? "Hide password" : "Show password"} title={visible ? "Hide password" : "Show password"}>
+                <button type="button" className="toggle-pw" onClick={() => setVisible(!visible)} aria-pressed={visible} aria-label={visible ? "Hide password" : "Show password"} title={visible ? "Hide password" : "Show password"}>
                   <EyeIcon open={visible} />
                 </button>
               </div>
@@ -112,7 +128,7 @@ export default function Login() {
 
             {actionData?.error ? <p role="alert" className="alert-error">{actionData.error}</p> : null}
 
-            <button type="submit" disabled={signingIn} className="auth-submit">
+            <button type="submit" disabled={signingIn} className="btn-primary auth-submit">
               {signingIn ? "Signing in…" : "Sign in"}
             </button>
 
@@ -127,13 +143,23 @@ export default function Login() {
 
           <div className="auth-divider" role="separator"><span>or</span></div>
 
-          <Form method="post">
-            <input type="hidden" name="intent" value="google" />
-            <button type="submit" className="auth-google" disabled={googlePending}>
-              <GoogleIcon />
-              {googlePending ? "Redirecting to Google…" : "Continue with Google"}
-            </button>
-          </Form>
+          <div className="auth-socials">
+            <Form method="post">
+              <input type="hidden" name="intent" value="google" />
+              <button type="submit" className="auth-social" disabled={googlePending}>
+                <GoogleIcon />
+                <span className="sr-only">{googlePending ? "Redirecting to Google…" : "Continue with Google"}</span>
+              </button>
+            </Form>
+            <a className="auth-social" href="/login" onClick={(event) => event.preventDefault()} title="Continue with Facebook">
+              <FacebookIcon />
+              <span className="sr-only">Continue with Facebook</span>
+            </a>
+            <a className="auth-social" href="/login" onClick={(event) => event.preventDefault()} title="Continue with Apple">
+              <AppleIcon />
+              <span className="sr-only">Continue with Apple</span>
+            </a>
+          </div>
 
           <p className="auth-footnote">Don't have an account? Contact your workspace owner.</p>
         </div>
