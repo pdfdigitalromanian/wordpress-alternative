@@ -1,6 +1,27 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, NavLink } from "react-router";
+import { Form, Link, NavLink, useActionData, useLoaderData } from "react-router";
+import { CreateWorkspaceDialog, InviteDialog, Toast } from "~/components/workspace-dialogs";
+import { useResultToast } from "~/components/workspace-shell";
+import { Wmark } from "~/components/workspace-sidebar";
+import { handleWorkspaceAction } from "~/lib/workspace-actions.server";
+import { loadWorkspaceScreen } from "~/lib/workspace.server";
 import "./overview.css";
+import type { Route } from "./+types/overview";
+
+/* The /overview screen from digital-romanian-screens.html: the central
+   workspace & site switcher plus the grouped sidebar. The demo WORKSPACES /
+   SITES arrays in that file are replaced by the signed-in user's real rows,
+   and the two switcher actions open the same #dlg-create-ws and #dlg-invite
+   dialogs the workspace screen uses, exactly as data-open="create-ws" and
+   data-open="invite" do there. */
+
+export async function loader({ request }: Route.LoaderArgs) {
+  return loadWorkspaceScreen(request);
+}
+
+export async function action({ request }: Route.ActionArgs) {
+  return handleWorkspaceAction(request, await request.formData());
+}
 
 const DR_LOGO = (
   <svg className="dr-logo" width="40" height="32" viewBox="0 0 40 32" fill="none" aria-hidden="true"><image href="/digital-romanian.png" x="0" y="0" width="40" height="32" preserveAspectRatio="none" /></svg>
@@ -15,53 +36,6 @@ const chevronSvg = (
 const switcherIco = (
   <svg className="switcher-ico" width="20" height="18" viewBox="0 0 20 18" fill="none" aria-hidden="true"><path d="M1.0595 16.171C0.353167 15.4647 0 14.6128 0 13.6152C0 12.6177 0.353167 11.7658 1.0595 11.0595C1.76583 10.3532 2.61775 10 3.61525 10C4.61275 10 5.46467 10.3532 6.171 11.0595C6.87733 11.7658 7.2305 12.6177 7.2305 13.6152C7.2305 14.6128 6.87733 15.4647 6.171 16.171C5.46467 16.8773 4.61275 17.2305 3.61525 17.2305C2.61775 17.2305 1.76583 16.8773 1.0595 16.171ZM13.0595 16.171C12.3532 15.4647 12 14.6128 12 13.6152C12 12.6177 12.3532 11.7658 13.0595 11.0595C13.7658 10.3532 14.6177 10 15.6152 10C16.6127 10 17.4647 10.3532 18.171 11.0595C18.8773 11.7658 19.2305 12.6177 19.2305 13.6152C19.2305 14.6128 18.8773 15.4647 18.171 16.171C17.4647 16.8773 16.6127 17.2305 15.6152 17.2305C14.6177 17.2305 13.7658 16.8773 13.0595 16.171ZM5.1095 15.1095C5.52367 14.6953 5.73075 14.1972 5.73075 13.6152C5.73075 13.0332 5.52367 12.5352 5.1095 12.121C4.69533 11.7068 4.19725 11.4998 3.61525 11.4998C3.03325 11.4998 2.53517 11.7068 2.121 12.121C1.70683 12.5352 1.49975 13.0332 1.49975 13.6152C1.49975 14.1972 1.70683 14.6953 2.121 15.1095C2.53517 15.5237 3.03325 15.7308 3.61525 15.7308C4.19725 15.7308 4.69533 15.5237 5.1095 15.1095ZM17.1095 15.1095C17.5237 14.6953 17.7307 14.1972 17.7307 13.6152C17.7307 13.0332 17.5237 12.5352 17.1095 12.121C16.6953 11.7068 16.1973 11.4998 15.6152 11.4998C15.0332 11.4998 14.5352 11.7068 14.121 12.121C13.7068 12.5352 13.4998 13.0332 13.4998 13.6152C13.4998 14.1972 13.7068 14.6953 14.121 15.1095C14.5352 15.5237 15.0332 15.7308 15.6152 15.7308C16.1973 15.7308 16.6953 15.5237 17.1095 15.1095ZM7.0595 6.171C6.35317 5.46467 6 4.61275 6 3.61525C6 2.61775 6.35317 1.76583 7.0595 1.0595C7.76583 0.353167 8.61775 0 9.61525 0C10.6128 0 11.4647 0.353167 12.171 1.0595C12.8773 1.76583 13.2305 2.61775 13.2305 3.61525C13.2305 4.61275 12.8773 5.46467 12.171 6.171C11.4647 6.87733 10.6128 7.2305 9.61525 7.2305C8.61775 7.2305 7.76583 6.87733 7.0595 6.171ZM11.1095 5.1095C11.5237 4.69533 11.7308 4.19725 11.7308 3.61525C11.7308 3.03325 11.5237 2.53517 11.1095 2.121C10.6953 1.70683 10.1972 1.49975 9.61525 1.49975C9.03325 1.49975 8.53517 1.70683 8.121 2.121C7.70683 2.53517 7.49975 3.03325 7.49975 3.61525C7.49975 4.19725 7.70683 4.69533 8.121 5.1095C8.53517 5.52367 9.03325 5.73075 9.61525 5.73075C10.1972 5.73075 10.6953 5.52367 11.1095 5.1095Z" fill="currentColor" /></svg>
 );
-
-const WORKSPACES = [
-  {
-    id: "digital-romanian",
-    name: "Digital Romanian",
-    ico: DR_LOGO,
-  },
-  {
-    id: "marketing-team",
-    name: "Marketing Team",
-    ico: (
-      <svg width="30" height="26" viewBox="0 0 30 26" fill="none" aria-hidden="true"><path d="M24.3372 14.3334V11.7334H30V14.3334H24.3372ZM26.1263 26L21.5963 22.24L23.0239 20.1669L27.5539 23.9265L26.1263 26ZM22.9636 5.83353L21.536 3.76003L26.066 0L27.494 2.0735L22.9636 5.83353ZM4.4278 24.2667V17.5002H2.83139C2.05035 17.5002 1.38326 17.1939 0.830114 16.5815C0.276705 15.9693 0 15.2311 0 14.3667V11.7C0 10.8356 0.276705 10.0974 0.830114 9.48523C1.38326 8.87279 2.05035 8.56657 2.83139 8.56657H8.88574L15.9037 3.93337V22.1334L8.88574 17.5002H6.77717V24.2667H4.4278ZM13.5543 17.5136V8.55313L9.53613 11.1666H2.83139C2.71105 11.1666 2.60063 11.2222 2.50013 11.3334C2.39963 11.4446 2.34938 11.5668 2.34938 11.7V14.3667C2.34938 14.4999 2.39963 14.6221 2.50013 14.7333C2.60063 14.8446 2.71105 14.9002 2.83139 14.9002H9.53613L13.5543 17.5136ZM18.0722 18.4401V7.62667C18.6867 8.24229 19.1816 9.01781 19.557 9.95323C19.9327 10.8889 20.1205 11.9157 20.1205 13.0334C20.1205 14.1511 19.9327 15.1778 19.557 16.1135C19.1816 17.0489 18.6867 17.8244 18.0722 18.4401Z" fill="currentColor" /></svg>
-    ),
-  },
-  {
-    id: "design-studio",
-    name: "Design Studio",
-    ico: (
-      <svg width="30" height="26" viewBox="0 0 30 26" fill="none" aria-hidden="true"><path d="M2.71163 24.375C1.95387 24.375 1.3125 24.0906 0.7875 23.5219C0.2625 22.9531 0 22.2583 0 21.4374V2.93759C0 2.1167 0.2625 1.42188 0.7875 0.853125C1.3125 0.284375 1.95387 0 2.71163 0L5.33663 5.6875H9.83663L7.21163 0H10.2116L12.8366 5.6875H17.3366L14.7116 0H17.7116L20.3366 5.6875H24.8366L22.2116 0H25.7884C26.5461 0 27.1875 0.284375 27.7125 0.853125C28.2375 1.42188 28.5 2.1167 28.5 2.93759V8.79694H26.25V8.125H2.25V21.4374C2.25 21.5834 2.29325 21.7032 2.37975 21.7969C2.46625 21.8906 2.57687 21.9375 2.71163 21.9375H14.1345V24.375H2.71163ZM17.4233 26V21.7063L25.5664 12.9248C25.7529 12.7228 25.9548 12.5806 26.172 12.4983C26.3892 12.4162 26.6066 12.3752 26.8241 12.3752C27.0566 12.3752 27.284 12.423 27.5063 12.5186C27.7283 12.6145 27.9278 12.7583 28.1048 12.95L29.4923 14.4686C29.6538 14.6709 29.7788 14.8897 29.8673 15.1251C29.9558 15.3604 30 15.5958 30 15.8312C30 16.0665 29.9596 16.3061 29.8789 16.5498C29.7981 16.7936 29.6693 17.0165 29.4923 17.2185L21.3866 26H17.4233ZM19.2116 24.0626H20.6366L25.5056 18.7622L24.8164 17.9904L24.1181 17.2282L19.2116 22.5188V24.0626ZM24.8164 17.9904L24.1181 17.2282L25.5056 18.7622L24.8164 17.9904Z" fill="currentColor" /></svg>
-    ),
-  },
-];
-
-const SITES = [
-  {
-    id: "digitalromania",
-    name: "digitalromania.ro",
-    ico: DR_LOGO,
-    workspaceId: "digital-romanian",
-  },
-  {
-    id: "shop",
-    name: "shop.digitalromania.ro",
-    ico: (
-      <svg width="30" height="26" viewBox="0 0 30 26" fill="none" aria-hidden="true"><path d="M11.4474 21.6001L21.3766 15.6L11.4474 9.59994V21.6001ZM2.85434 26C2.05671 26 1.38158 25.74 0.828947 25.22C0.276316 24.7 0 24.0647 0 23.3142V5.2H9.47368V2.6858C9.47368 1.93527 9.75 1.3 10.3026 0.78C10.8553 0.26 11.5304 0 12.328 0H17.672C18.4696 0 19.1447 0.26 19.6974 0.78C20.25 1.3 20.5263 1.93527 20.5263 2.6858V5.2H30V23.3142C30 24.0647 29.7237 24.7 29.1711 25.22C28.6184 25.74 27.9433 26 27.1457 26H2.85434ZM2.85434 23.7714H27.1457C27.2672 23.7714 27.3786 23.7238 27.4796 23.6284C27.5809 23.5333 27.6316 23.4286 27.6316 23.3142V7.42857H2.36842V23.3142C2.36842 23.4286 2.41908 23.5333 2.52039 23.6284C2.62145 23.7238 2.73276 23.7714 2.85434 23.7714ZM11.8421 5.2H18.1579V2.6858C18.1579 2.5714 18.1072 2.46666 18.0059 2.37157C17.9049 2.27624 17.7936 2.22857 17.672 2.22857H12.328C12.2064 2.22857 12.0951 2.27624 11.9941 2.37157C11.8928 2.46666 11.8421 2.5714 11.8421 2.6858V5.2Z" fill="currentColor" /></svg>
-    ),
-    workspaceId: "digital-romanian",
-  },
-  {
-    id: "blog",
-    name: "blog.digitalromania.ro",
-    ico: (
-      <svg width="30" height="28" viewBox="0 0 30 28" fill="none" aria-hidden="true"><path d="M0 28V0H30V28H0ZM25.7921 21.9504H4.20794V24.6742H25.7921V21.9504ZM4.20794 19.9866H25.7921V17.2624H4.20794V19.9866ZM4.20794 14.6967H25.7921V3.92741H4.20794V14.6967Z" fill="currentColor" /></svg>
-    ),
-    workspaceId: "digital-romanian",
-  },
-];
 
 const OVERVIEW_ICON = (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M9.17647 5.17647V0H16V5.17647H9.17647ZM0 8.47059V0H6.82353V8.47059H0ZM9.17647 16V7.52941H16V16H9.17647ZM0 16V10.8235H6.82353V16H0ZM1.41176 7.05882H5.41176V1.41176H1.41176V7.05882ZM10.5882 14.5882H14.5882V8.94118H10.5882V14.5882ZM10.5882 3.76471H14.5882V1.41176H10.5882V3.76471ZM1.41176 14.5882H5.41176V12.2353H1.41176V14.5882Z" fill="currentColor" /></svg>
@@ -83,12 +57,35 @@ const SETTINGS_ICON = (
 );
 
 export default function Overview() {
+  const data = useLoaderData<typeof loader>();
+  const actionResult = useActionData<typeof action>();
+  const { toast, setToast } = useResultToast(actionResult, null);
+
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState(WORKSPACES[0].id);
-  const [activeSiteId, setActiveSiteId] = useState(SITES[0].id);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(data.workspaces[0]?.id ?? null);
+  const [activeSiteId, setActiveSiteId] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set(["nav-store"]));
+  const [createWsOpen, setCreateWsOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
+
+  // state.currentId in the standalone file, the same key the workspace and
+  // admin screens read, so all three agree on which workspace is current.
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem("dr-current-workspace");
+      if (stored && data.workspaces.some((w) => w.id === stored)) setActiveWorkspaceId(stored);
+    } catch {
+      /* private mode */
+    }
+    // Restore once, on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const WORKSPACES = data.workspaces.map((w) => ({ id: w.id, name: w.name, ico: <Wmark workspace={w} size={30} /> }));
+  const activeWorkspace = data.workspaces.find((w) => w.id === activeWorkspaceId) ?? data.workspaces[0];
+  const SITES = (activeWorkspace?.sites ?? []).map((s) => ({ id: s.id, name: s.name }));
 
   const swBtnRef = useRef<HTMLButtonElement>(null);
   const swPanelRef = useRef<HTMLDivElement>(null);
@@ -122,11 +119,17 @@ export default function Overview() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setSwitcherOpen(false);
     };
+    // The standalone file's delegated handler calls closeSwitcher(false) /
+    // closeWsMenu(false) before opening a dialog, so the panel is never left
+    // hanging open behind the modal.
+    const onOpenDialog = () => setSwitcherOpen(false);
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
+    document.addEventListener("ws:close-overlays", onOpenDialog);
     return () => {
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
+      document.removeEventListener("ws:close-overlays", onOpenDialog);
     };
   }, [switcherOpen]);
 
@@ -194,12 +197,25 @@ export default function Overview() {
   const filteredSites = SITES.filter((s) => !q || s.name.toLowerCase().includes(q));
   const anyHit = filteredWorkspaces.length > 0 || filteredSites.length > 0;
 
-  const activeWorkspace = WORKSPACES.find((w) => w.id === activeWorkspaceId) ?? WORKSPACES[0];
+  // renderOverviewSwitcher(): keep the site selection valid, and default it to
+  // the first site the way the standalone file does.
+  useEffect(() => {
+    if (!SITES.length) {
+      setActiveSiteId(null);
+      return;
+    }
+    if (!activeSiteId || !SITES.some((s) => s.id === activeSiteId)) setActiveSiteId(SITES[0].id);
+  }, [activeSiteId, SITES]);
 
   const selectWorkspace = (id: string) => {
     setActiveWorkspaceId(id);
     setSwitcherOpen(false);
     setQuery("");
+    try {
+      window.localStorage.setItem("dr-current-workspace", id);
+    } catch {
+      /* private mode */
+    }
   };
   const selectSite = (id: string) => {
     setActiveSiteId(id);
@@ -238,7 +254,7 @@ export default function Overview() {
             onClick={() => setSwitcherOpen((open) => !open)}
           >
             {switcherIco}
-            <span className="label" id="switcher-label">{activeWorkspace.name} Workspace</span>
+            <span className="label" id="switcher-label">{activeWorkspace ? `${activeWorkspace.name} Workspace` : "No workspace"}</span>
             {chevronSvg}
           </button>
 
@@ -251,39 +267,59 @@ export default function Overview() {
                   <input ref={swSearchRef} id="switcher-search" type="search" placeholder="Search pages, products..." autoComplete="off" value={query} onChange={(e) => setQuery(e.target.value)} />
                 </div>
 
-                {filteredWorkspaces.length > 0 ? (
-                  <div className="switcher-group">
-                    <h2>Workspace</h2>
-                    <ul className="switcher-list" data-group="workspace">
-                      {filteredWorkspaces.map((w) => (
-                        <li key={w.id}>
-                          <button className="switcher-item" aria-current={activeWorkspaceId === w.id} data-name={w.name} onClick={() => selectWorkspace(w.id)}>
-                            <span className="ico">{w.ico}</span>
-                            <span className="name">{w.name}</span>
-                            {checkSvg}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
+                <div className="switcher-group">
+                  <h2>Workspace</h2>
+                  <ul className="switcher-list" data-group="workspace">
+                    {filteredWorkspaces.map((w) => (
+                      <li key={w.id}>
+                        <button className="switcher-item" aria-current={activeWorkspaceId === w.id} data-name={w.name} onClick={() => selectWorkspace(w.id)}>
+                          <span className="ico">{w.ico}</span>
+                          <span className="name">{w.name}</span>
+                          {checkSvg}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                  {/* data-open="create-ws" and data-open="invite" in the
+                      standalone file: both open a dialog, neither navigates. */}
+                  <div className="switcher-actions">
+                    <button type="button" className="create-site" data-open="create-ws" onClick={() => { setCreateWsOpen(true); setSwitcherOpen(false); }}>
+                      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true"><path d="M3 9H15M9 3V15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                      Create new workspace
+                    </button>
+                    {!data.workspaces.length ? null : (
+                      <button type="button" className="create-site" data-open="invite" onClick={() => { setInviteOpen(true); setSwitcherOpen(false); }}>
+                        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true"><use href="#i-user-plus" /></svg>
+                        Invite member
+                      </button>
+                    )}
+                      <Form method="post" action="/logout">
+                      <button type="submit" className="create-site switcher-signout">
+                        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true"><path d="M12 3.75H4.5A1.5 1.5 0 0 0 3 5.25v7.5A1.5 1.5 0 0 0 4.5 14.25H12M8.25 9h6.75M12.75 6.75 15 9l-2.25 2.25" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                        Sign out
+                      </button>
+                    </Form>
                   </div>
-                ) : null}
+                </div>
 
-                {filteredSites.length > 0 ? (
-                  <div className="switcher-group">
-                    <h2>Sites</h2>
-                    <ul className="switcher-list" data-group="site">
-                      {filteredSites.map((s) => (
-                        <li key={s.id}>
-                          <button className="switcher-item" aria-current={activeSiteId === s.id} data-name={s.name} onClick={() => selectSite(s.id)}>
-                            <span className="ico">{s.ico}</span>
-                            <span className="name">{s.name}</span>
-                            {checkSvg}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
+                <div className="switcher-group" id="sw-sites-group" hidden={!SITES.length}>
+                  <h2>Sites</h2>
+                  <ul className="switcher-list" data-group="site">
+                    {filteredSites.map((s) => (
+                      <li key={s.id}>
+                        <button className="switcher-item" aria-current={activeSiteId === s.id} data-name={s.name} onClick={() => selectSite(s.id)}>
+                          <span className="ico">
+                            <span className="wmark" style={{ "--s": "28px", background: "#b5b2a8" } as React.CSSProperties} aria-hidden="true">
+                              {s.name.slice(0, 1).toUpperCase()}
+                            </span>
+                          </span>
+                          <span className="name">{s.name}</span>
+                          {checkSvg}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
 
                 <p className="switcher-empty" hidden={anyHit}>No workspaces or sites match that search.</p>
 
@@ -313,7 +349,7 @@ export default function Overview() {
 
           <ul className="nav">
             <li>
-              <NavLink to="/workspace" end className="nav-link" aria-current="page">
+              <NavLink to="/overview" end className="nav-link" aria-current="page">
                 {OVERVIEW_ICON}
                 Overview
               </NavLink>
@@ -333,7 +369,7 @@ export default function Overview() {
                   </button>
                   <ul className="nav-sub" id={id} hidden={collapsed.has(id)}>
                     {group.items.map((item) => (
-                      <li key={item}><Link to="/workspace">{item}</Link></li>
+                      <li key={item}><Link to="/overview">{item}</Link></li>
                     ))}
                   </ul>
                 </li>
@@ -341,13 +377,13 @@ export default function Overview() {
             })}
 
             <li>
-              <a className="nav-link" href="/workspace" onClick={(e) => e.preventDefault()}>
+              <a className="nav-link" href="/overview" onClick={(e) => e.preventDefault()}>
                 {PUBLISHING_ICON}
                 Publishing
               </a>
             </li>
             <li>
-              <a className="nav-link" href="/workspace" onClick={(e) => e.preventDefault()}>
+              <a className="nav-link" href="/overview" onClick={(e) => e.preventDefault()}>
                 {SETTINGS_ICON}
                 Settings
               </a>
@@ -363,6 +399,23 @@ export default function Overview() {
       </div>
 
       <div className={`scrim${menuOpen ? " show" : ""}`} onClick={() => setMenuOpen(false)} />
+
+      <CreateWorkspaceDialog open={createWsOpen} onClose={() => setCreateWsOpen(false)} actionResult={actionResult} />
+      <InviteDialog
+        open={inviteOpen}
+        onClose={() => setInviteOpen(false)}
+        workspace={activeWorkspace}
+        knownPeople={data.directory}
+        actionResult={actionResult}
+      />
+      {toast ? (
+        <Toast
+          text={toast.text}
+          {...(toast.label
+            ? { link: { label: toast.label, onClick: () => { setToast(null); if (toast.href) window.location.assign(toast.href); } } }
+            : {})}
+        />
+      ) : null}
     </div>
   );
 }

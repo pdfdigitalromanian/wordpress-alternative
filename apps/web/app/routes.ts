@@ -1,4 +1,4 @@
-import { type RouteConfig, index, route } from "@react-router/dev/routes";
+import { type RouteConfig, index, layout, route } from "@react-router/dev/routes";
 
 export default [
   // routes/site-page.tsx is registered twice on purpose: a `*` splat
@@ -10,9 +10,36 @@ export default [
   index("routes/site-page.tsx", { id: "site-page-index" }),
   route("login", "routes/login.tsx"),
   route("logout", "routes/logout.tsx"),
+  // Sign-up and onboarding screens ported from digital-romanian-screens.html
+  route("signup", "routes/signup.tsx"),
+  route("signup/password", "routes/signup-password.tsx"),
+  route("signup/created", "routes/signup-created.tsx"),
+  route("onboarding/profile", "routes/onboarding-profile.tsx"),
+  route("onboarding/workspace", "routes/onboarding-workspace.tsx"),
   route("reset-password", "routes/reset-password.tsx"),
   route("invitation", "routes/invitation.tsx"),
-  route("workspace", "routes/overview.tsx"),
+  // The workspace area from digital-romanian-screens.html. One pathless
+  // layout owns the shell, the sidebar, the workspace switcher and the two
+  // dialogs; the four sections are its children. The standalone file keeps
+  // all of that in a single `state` object, and splitting it across four
+  // sibling routes is what previously made the sidebar toggle and the
+  // workspace choice reset on every click.
+  //
+  // The section paths are top level, as asked for, not /workspace/*. The
+  // sidebar rows are the same four the file declares (All sites, Templates,
+  // Team, General settings). "template" and "teams" are registered as aliases
+  // of the same leaf so either spelling resolves without a redirect hop.
+  layout("routes/workspace.tsx", [
+    route("workspace", "routes/workspace-sites.tsx"),
+    route("templates", "routes/templates.tsx"),
+    route("template", "routes/templates.tsx", { id: "template-alias" }),
+    route("team", "routes/team.tsx"),
+    route("teams", "routes/team.tsx", { id: "teams-alias" }),
+    route("settings", "routes/settings.tsx"),
+  ]),
+  // The site overview screen (sidebar + per-site navigation), same screen the
+  // standalone file shows at #/overview.
+  route("overview", "routes/overview.tsx"),
   route("admin", "routes/admin/layout.tsx", [
     index("routes/admin/index.tsx"),
     route("sites/:siteId", "routes/admin/site.tsx"),

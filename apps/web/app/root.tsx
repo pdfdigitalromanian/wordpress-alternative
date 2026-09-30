@@ -8,7 +8,9 @@ import {
 } from "react-router";
 
 import type { Route } from "./+types/root";
+import { DrSprite } from "./components/dr-sprite";
 import "./app.css";
+import "./digital-romanian.css";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -33,6 +35,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body>
+        <DrSprite />
         {children}
         <ScrollRestoration />
         <Scripts />

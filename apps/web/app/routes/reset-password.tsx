@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Form, Link, redirect, useActionData, useNavigation } from "react-router";
+import { landingFor } from "~/lib/landing";
 import { createSupabaseServerClient } from "~/lib/supabase.server";
 import type { Route } from "./+types/reset-password";
 
@@ -8,7 +9,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (user) throw redirect("/admin");
+  if (user) throw redirect(await landingFor(request, user));
   return null;
 }
 
@@ -47,7 +48,9 @@ export default function ResetPassword() {
     <main className="auth-page">
       <div className="auth-card">
         <div className="auth-inner auth-center auth-reset">
-          <img className="auth-logo" src="/digital-romanian.png" alt="Digital Romanian" width={133} height={116} />
+          <svg className="auth-logo" width={133} height={116} viewBox="0 0 133 116" fill="none" role="img" aria-label="Digital Romanian">
+            <use href="#i-dr-logo-full" />
+          </svg>
 
           <h1 tabIndex={-1}>Reset your password</h1>
           <p className="auth-lead">Enter your email address and we&apos;ll send you a link to reset your password.</p>
@@ -71,6 +74,9 @@ export default function ResetPassword() {
           </div>
 
           <Link to="/login" className="back-link">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <use href="#i-arrow-left" />
+            </svg>
             Back to sign in
           </Link>
         </div>

@@ -6,6 +6,8 @@ build/
 .turbo/
 .medusa/
 *.log
+*.err
+*.log.err
 .DS_Store
 
 # Environment files - never commit real secrets
