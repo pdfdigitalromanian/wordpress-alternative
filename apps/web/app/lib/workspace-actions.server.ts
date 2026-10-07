@@ -5,8 +5,8 @@
 import { redirect } from "react-router";
 import type { Database } from "~/lib/database.types";
 import { slugify } from "~/lib/slugify";
-import { createSupabaseAdminClient, createSupabaseServerClient } from "~/lib/supabase.server";
-import { recordActivity } from "~/lib/workspace.server";
+import { createSupabaseServerClient } from "~/lib/supabase.server";
+import { cachedAuthDirectory, recordActivity } from "~/lib/workspace.server";
 
 export type WorkspaceActionResult =
   | { error: string; field?: "wsname" | "wsslug" | "email" }
@@ -22,16 +22,22 @@ export type WorkspaceActionResult =
       access: string;
       accessText: string;
       inviter: string;
+      /** True when the invite carried per-site roles that have no column to
+       *  store them in (workspace_memberships has none). */
+      siteRolesNotStored: boolean;
     }
   | { unknown: true };
 
 /** The file's ROLES map (digital-romanian-screens.html) against the
  *  workspace_role enum the applied schema allows. Only the four storable
  *  values can be written; "author" is shown in the picker because the file
- *  lists it, and is stored as editor. */
+ *  lists it, and is stored as editor. "contributor" is the invite dialog's
+ *  workspace-level role for someone who only reaches assigned sites; the enum
+ *  has no such value, so the row is stored as editor. */
 const ROLE_FOR_DB: Record<string, Database["public"]["Enums"]["workspace_role"]> = {
   owner: "owner",
   admin: "administrator",
+  contributor: "editor",
   editor: "editor",
   author: "editor",
   viewer: "viewer",
@@ -168,9 +174,9 @@ export async function handleWorkspaceAction(request: Request, formData: FormData
      with user_id = null, which is what the Team view reads back. */
   if (intent === "invite") {
     const workspaceId = String(formData.get("workspaceId") ?? "");
-    const role = String(formData.get("role") ?? "editor");
-    const access = String(formData.get("access") ?? "all");
-    const siteIds = formData.getAll("siteId").map(String).filter(Boolean);
+    const wrole = String(formData.get("role") ?? "contributor");
+    const accessMode = String(formData.get("access") ?? (wrole === "admin" ? "all" : "some"));
+    const selectedIds = new Set(formData.getAll("siteId").map(String).filter(Boolean));
 
     if (!workspaceId) return { error: "Add at least one email address." };
 
@@ -180,17 +186,33 @@ export async function handleWorkspaceAction(request: Request, formData: FormData
       .filter(Boolean);
     if (!emails.length) return { error: "Add at least one email address." };
 
-    const { data: ws } = await supabase.from("workspaces").select("name, sites(id, name)").eq("id", workspaceId).maybeSingle();
+    const { data: ws } = await supabase.from("workspaces").select("name, sites(id, name, slug)").eq("id", workspaceId).maybeSingle();
     if (!ws) return { error: "That workspace could not be found." };
+
+    // Access on the form matches the standalone file: "all" or the ids of the
+    // sites the sender checked in the pills. Scope it to this workspace so a
+    // forged id never leaks a site name into the copy below.
+    const wsSites = ws.sites ?? [];
+    const scoped =
+      accessMode === "all" ? wsSites : wsSites.filter((s) => selectedIds.has(s.id));
+    if (wrole === "contributor" && accessMode === "some" && !scoped.length) {
+      return { error: "Pick at least one site." };
+    }
+
+    // A contributor's per-site role rides along in the payload but nowhere in
+    // the schema can it be stored: workspace_memberships has no site-role column.
+    // Honest UI: the invite is sent with the workspace-level role and the toast
+    // below says the per-site part isn't persisted.
+    const siteRolesNotStored = wrole === "contributor" && scoped.length > 0;
 
     // workspace_memberships.user_id is NOT NULL in the applied schema, so a
     // membership can only be created for somebody who already has an account.
     // An address with no account is reported back instead of silently dropped;
     // storing pending invitations needs a migration, which is not applied.
-    const allUsers = await listAuthUsers(supabase);
-    if (!allUsers) return { error: "Could not look up those addresses." };
+    const allUsers = await cachedAuthDirectory();
+    if (!allUsers.length) return { error: "Could not look up those addresses." };
 
-    const byEmail = new Map(allUsers.map((u) => [u.email, u.id]));
+    const byEmail = new Map(allUsers.map((u) => [(u.email ?? "").toLowerCase(), u.id]));
 
     const added: { id: string; email: string }[] = [];
     for (const email of emails) {
@@ -198,7 +220,7 @@ export async function handleWorkspaceAction(request: Request, formData: FormData
       if (!id) continue;
       const { error } = await supabase
         .from("workspace_memberships")
-        .insert({ workspace_id: workspaceId, user_id: id, role: ROLE_FOR_DB[role] ?? role });
+        .insert({ workspace_id: workspaceId, user_id: id, role: ROLE_FOR_DB[wrole] ?? "editor" });
       if (!error) added.push({ id, email });
     }
 
@@ -212,57 +234,44 @@ export async function handleWorkspaceAction(request: Request, formData: FormData
       };
     }
 
-    const label = ROLE_LABEL[ROLE_FOR_DB[role] ?? role] ?? "Editor";
+    const roleLabel = wrole === "contributor" ? "Site contributor" : ROLE_LABEL[ROLE_FOR_DB[wrole]] ?? "Editor";
     recordActivity(
       supabase,
       workspaceId,
       "invite",
-      added.length > 1
-        ? `${added.length} people were invited as ${label}`
-        : `${added[0].email} was invited as ${label}`,
+      added.length > 1 ? `${added.length} people were invited as ${roleLabel}` : `${added[0].email} was invited as ${roleLabel}`,
     );
+
+    const siteNames = scoped.map((s) => s.name);
 
     return {
       invited: added.length,
       skipped: unknown,
       workspaceName: ws.name,
       emails: added.map((a) => a.email),
-      role,
-      access,
-      accessText: accessText(ws.sites ?? [], access, siteIds),
+      role: roleLabel,
+      access: accessMode,
+      accessText:
+        wrole === "admin" || accessMode === "all"
+          ? "All sites in this workspace"
+          : siteNames.length
+            ? siteNames.join(", ")
+            : "No sites yet",
       inviter: String(user.user_metadata?.display_name ?? user.email ?? ""),
+      siteRolesNotStored,
     };
   }
 
   return { unknown: true };
 }
 
-/** The auth user list, as lower-cased e-mail -> id. Read with the service-role
- *  client: a user-scoped client cannot call auth.admin.* at all, and the
- *  service-role key must never reach the browser. Returns null on failure so
- *  callers can surface a message instead of adding nobody. */
-async function listAuthUsers(supabase: ReturnType<typeof createSupabaseServerClient>["supabase"]) {
-  void supabase;
-  const { data, error } = await createSupabaseAdminClient().auth.admin.listUsers({ perPage: 1000 });
-  if (error || !data) return null;
-  return data.users
-    .map((u) => ({ id: u.id, email: (u.email ?? "").toLowerCase() }))
-    .filter((u) => u.email);
-}
-
 const ROLE_LABEL: Record<string, string> = {
   owner: "Owner",
-  admin: "Administrator",
+  administrator: "Administrator",
   editor: "Editor",
   author: "Author",
   viewer: "Viewer",
 };
-
-function accessText(sites: { id: string; name: string }[], access: string, siteIds: string[]) {
-  if (access !== "some") return "All sites in this workspace";
-  const names = sites.filter((s) => siteIds.includes(s.id)).map((s) => s.name);
-  return names.length ? names.join(", ") : "Selected sites";
-}
 
 async function firstWorkspaceId(
   supabase: ReturnType<typeof createSupabaseServerClient>["supabase"],

@@ -8,7 +8,10 @@ test.beforeEach(async ({ page, request }) => {
   await page.getByLabel("Email address").fill("owner@example.test");
   await page.getByLabel("Password", { exact: true }).fill("local-fixture-only");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(page).toHaveURL(/\/admin$/);
+  // The prototype's order is profile -> workspace -> /workspace, so a signed-in
+  // account with both lands on the workspace screen. /admin is the per-site
+  // editor and is only ever entered from there.
+  await expect(page).toHaveURL(/\/workspace$/);
 });
 
 test("blank page → click to insert → saved preview → reviewed publication", async ({ page, request }) => {
@@ -136,4 +139,107 @@ test("duplicate and remove are scoped and require current page identity", async 
   state = await (await request.get(`${fixture}/__test/state`)).json();
   expect(state.tables.pages).toHaveLength(1);
   expect(state.tables.pages[0].id).toBe("home-page");
+});
+// The workspace shell screens ported from digital-romanian-screen.html: the
+// profile dropdown (line 1470-1476) and the Library / Team / General settings
+// views (renderTemplates 2103, renderTeam 2192, renderSettings 2251).
+
+test("profile dropdown is the only place sign out lives", async ({ page }) => {
+  await page.goto("/templates");
+  const trigger = page.getByRole("button", { name: "Account menu" });
+  await trigger.click();
+  const menu = page.locator(".me-menu");
+  await expect(menu.getByRole("link", { name: "Edit profile" })).toBeVisible();
+  await expect(menu.getByRole("link", { name: "Workspace settings" })).toHaveAttribute("href", "/settings");
+  await expect(menu.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.locator(".switcher-signout")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
+  await expect(trigger).toBeFocused();
+});
+
+test("library lists the prototype's demo templates; Create stays on the page", async ({ page }) => {
+  await page.goto("/templates");
+  await expect(page.getByRole("heading", { name: "Library" })).toBeVisible();
+  // The standalone file's demoLibrary seeds nine templates; the featured view
+  // shows the four most-used and a "View all" toggle.
+  await expect(page.locator(".tpl")).toHaveCount(4);
+  await expect(page.getByText("Hero section", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "View all templates" }).click();
+  await expect(page.locator(".tpl")).toHaveCount(9);
+  // Create template must NOT leave the page: it adds an "Untitled template"
+  // item in memory and toasts, exactly like the file's [data-new-tpl] handler.
+  await page.getByRole("button", { name: "Create template" }).click();
+  await expect(page).toHaveURL(/\/templates$/);
+  await expect(page.getByRole("status").last()).toContainText("Untitled template created");
+  await expect(page.locator(".tpl")).toHaveCount(10);
+  // The five component tiles with the prototype's counts.
+  await expect(page.getByRole("button", { name: /Buttons/ })).toBeVisible();
+  await expect(page.locator(".comp")).toHaveCount(5);
+});
+
+test("team lists memberships and an owner can change a role", async ({ page, request }) => {
+  await page.goto("/team");
+  await expect(page.getByRole("heading", { name: "Workspace members" })).toBeVisible();
+  const rows = page.locator("#team-rows .mrow");
+  await expect(rows).toHaveCount(3);
+  await expect(page.getByText("Ana Popescu", { exact: true })).toBeVisible();
+  await expect(page.getByText("(you)", { exact: false })).toBeVisible();
+await rows.filter({ hasText: "Mihai Ionescu" }).getByRole("button", { name: /More actions/ }).click();
+  await page.getByRole("button", { name: /^Administrator/ }).click();
+  // The pill label (roleLabel) abbreviates administrator to Admin.
+  await expect(page.locator("#team-rows").getByText("Admin", { exact: true })).toHaveCount(2);
+  const state = await (await request.get(`${fixture}/__test/state`)).json();
+  expect(state.tables.workspace_memberships.map((m: { role: string }) => m.role)).toEqual(["owner", "administrator", "administrator"]);
+});
+
+test("general settings saves the workspace name and reports skipped fields", async ({ page, request }) => {
+  await page.goto("/settings");
+  await expect(page.getByRole("heading", { name: "Workspace settings" })).toBeVisible();
+const save = page.getByRole("button", { name: "Save", exact: true });
+  await expect(save).toBeDisabled();
+  // scoped to #set-name: the switcher's "add workspace" form also labels an
+  // input "Workspace name", so the un-scoped byLabel assertion is ambiguous.
+  await page.locator("#set-name").fill("Renamed workspace");
+  await page.locator("#set-lang").selectOption("fr");
+  await page
+    .locator('input[aria-label="Upload workspace image"]')
+    .setInputFiles({ name: "logo.png", mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64") });
+  await expect(save).toBeEnabled();
+  await save.click();
+await expect(page.getByRole("status").last()).toContainText("Not applied yet: workspace image, default language");
+  const state = await (await request.get(`${fixture}/__test/state`)).json();
+  expect(state.tables.workspaces[0].name).toBe("Renamed workspace");
+});
+
+test("owner can transfer workspace ownership to another member", async ({ page, request }) => {
+  await page.goto("/settings");
+  await page.getByRole("button", { name: "Transfer ownership", exact: true }).click();
+  await page.locator("#tr-list label", { hasText: "Ana Popescu" }).locator("input").check();
+  await page.locator("#tr-ack").check();
+  await page.locator("#tr-confirm").fill("TRANSFER");
+  await expect(page.locator("#tr-submit")).toBeEnabled();
+  await page.locator("#tr-submit").click();
+  await expect(page.getByRole("status").last()).toContainText("Ownership transferred. You're now an administrator");
+  const state = await (await request.get(`${fixture}/__test/state`)).json();
+  expect(
+    state.tables.workspace_memberships.map((m: { role: string }) => m.role).sort(),
+  ).toEqual(["administrator", "editor", "owner"]);
+  // No longer the owner, so the danger zone is locked instead of transferable.
+  await expect(page.getByText("Workspace owner only", { exact: true })).toHaveCount(0);
+  await expect(page.getByText(/can transfer ownership or delete this workspace/)).toBeVisible();
+});
+
+test("danger zone deletes the workspace only after a typed confirmation", async ({ page, request }) => {
+  await page.goto("/settings");
+  await page.getByRole("button", { name: "Delete workspace", exact: true }).click();
+  await page.locator("#dw-confirm").fill("wrong");
+  await expect(page.locator("#dw-submit")).toBeDisabled();
+  await page.locator("#dw-confirm").fill("test");
+  await expect(page.locator("#dw-submit")).toBeEnabled();
+  await page.locator("#dw-submit").click();
+  await expect(page).toHaveURL(/\/onboarding\/workspace$/);
+  const state = await (await request.get(`${fixture}/__test/state`)).json();
+  expect(state.tables.workspaces).toHaveLength(0);
+  expect(state.tables.workspace_memberships).toHaveLength(0);
 });

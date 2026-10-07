@@ -73,26 +73,70 @@ function useNativeDialog(open: boolean, onClose: () => void, openKey: string) {
   };
 }
 
-/* ROLES and ROLE_SHORT, from the standalone file. Only the four roles the
-   schema's workspace_role enum allows can be stored; author is shown because
-   the file lists it, but the action falls back to editor for it. */
-const ROLES: Record<string, { label: string }> = {
-  admin: { label: "Admin" },
-  editor: { label: "Editor" },
-  author: { label: "Author" },
-  viewer: { label: "Viewer" },
+/* Workspace-level roles for an invite. There are two: Admin manages billing,
+   team and every site; Contributor is granted access per site below. The enum
+   has no "contributor" value, so the dialog posts "contributor" and the action
+   stores editor on the membership row. */
+const W_ROLES: Record<string, { label: string; short: string }> = {
+  admin: { label: "Admin", short: "Manage billing, team and all sites" },
+  contributor: { label: "Contributor", short: "Access only the sites they're assigned to" },
 };
 
-const ROLE_SHORT: Record<string, string> = {
-  admin: "Manage members, settings and sites",
-  editor: "Edit and publish sites",
-  author: "Write content, can't publish",
-  viewer: "View only",
-};
+/* The four per-site roles, exactly as digital-romanian-screen.html declares
+   them (lines 2527-2536): same keys, labels, descriptions, tints and icons. */
+const SITE_ROLES = [
+  {
+    value: "admin",
+    label: "Admin",
+    desc: "Full control: settings, domains and publishing",
+    tc: "#f3e4d4",
+    path: <path d="M8 2l5 2v4c0 3-2.2 5.2-5 6-2.8-.8-5-3-5-6V4z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />,
+  },
+  {
+    value: "editor",
+    label: "Editor",
+    desc: "Edit pages and design, and publish changes",
+    tc: "#dfe8f7",
+    path: <path d="M10.5 3l2.5 2.5L6 12.5H3.5V10z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />,
+  },
+  {
+    value: "content",
+    label: "Content editor",
+    desc: "Write and update content. Can’t publish or change design",
+    tc: "#dcefe2",
+    path: (
+      <>
+        <path d="M4 2.5h5.5L12 5v8.5H4z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+        <path d="M6 8h4M6 10.5h3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      </>
+    ),
+  },
+  {
+    value: "shop",
+    label: "Shop manager",
+    desc: "Manage products, orders and customers",
+    tc: "#fbe7c6",
+    path: (
+      <>
+        <path d="M3.5 5.5h9l-.8 8h-7.4z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+        <path d="M6 5.5V4.5a2 2 0 0 1 4 0v1" stroke="currentColor" strokeWidth="1.4" />
+      </>
+    ),
+  },
+] as const;
 
-/** Storable roles, mapped to the enum: author has no column value, so it is
- *  stored as editor and the Team view still labels it correctly. */
-const ROLE_FOR_DB: Record<string, string> = { admin: "administrator", editor: "editor", author: "editor", viewer: "viewer" };
+type SiteRole = (typeof SITE_ROLES)[number];
+
+/** roleTile() in the standalone file: a tinted square with the role's icon. */
+const RoleTile = ({ role, size = 14 }: { role: SiteRole; size?: number }) => (
+  <span className="rt" style={{ "--tc": role.tc } as React.CSSProperties}>
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      {role.path}
+    </svg>
+  </span>
+);
+
+const ROLE_FOR_DB: Record<string, string> = { admin: "administrator", contributor: "editor" };
 
 const PURPOSES = [
   { label: "Client sites", icon: "i-website", w: 16, h: 16 },
@@ -325,39 +369,61 @@ export function InviteDialog({
   actionResult: WorkspaceActionResult | undefined;
 }) {
   const emailRef = useRef<HTMLInputElement>(null);
+  const sroleBtnRef = useRef<HTMLButtonElement>(null);
+  const srolePopRef = useRef<HTMLDivElement>(null);
   const [picked, setPicked] = useState<{ name: string; email: string }[]>([]);
   const [typed, setTyped] = useState("");
   const [options, setOptions] = useState<Suggestion[]>([]);
   const [activeIdx, setActiveIdx] = useState(-1);
-  const [role, setRole] = useState("editor");
-  const [roleOpen, setRoleOpen] = useState(false);
-  const [roleActive, setRoleActive] = useState(0);
+  const [wrole, setWrole] = useState<"admin" | "contributor">("contributor");
+  const [wroleOpen, setWroleOpen] = useState(false);
+  const [wroleActive, setWroleActive] = useState(0);
   const [access, setAccess] = useState<"all" | "some">("all");
-  const [siteIds, setSiteIds] = useState<string[]>([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [siteRole, setSiteRole] = useState<string>("editor");
+  const [sroleOpen, setSroleOpen] = useState(false);
+  const [sroleActive, setSroleActive] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   const navigation = useNavigation();
   const busy = navigation.state === "submitting";
 
-  // openInvite() resets every field each time it is opened.
+  // openInvite() resets every field each time it is opened. The role defaults
+  // to Contributor and, like the standalone file, a contributor starts on
+  // "Selected sites" when the workspace has any.
   useEffect(() => {
     if (!open) return;
     setPicked([]);
     setTyped("");
     setOptions([]);
     setActiveIdx(-1);
-    setRole("editor");
-    setRoleOpen(false);
-    setAccess("all");
-    setSiteIds([]);
+    setWrole("contributor");
+    setWroleOpen(false);
+    setAccess(workspace?.sites.length ? "some" : "all");
+    setSelectedIds([]);
+    setSiteRole("editor");
+    setSroleOpen(false);
+    setSroleActive(0);
     setError(null);
     const t = window.setTimeout(() => emailRef.current?.focus(), 0);
     return () => window.clearTimeout(t);
-  }, [open]);
+  }, [open, workspace?.sites.length]);
 
   const serverError = actionResult && "error" in actionResult ? actionResult.error : null;
 
-  const roleKeys = useMemo(() => Object.keys(ROLE_SHORT), []);
+  const roleKeys = useMemo(() => Object.keys(W_ROLES), []);
+
+  // The HTML points the site-role popup upwards when it would run off the
+  // bottom of the screen; the class is applied after the pop renders.
+  useEffect(() => {
+    if (!sroleOpen) return;
+    const pop = srolePopRef.current;
+    if (!pop) return;
+    const r = pop.getBoundingClientRect();
+    pop.classList.toggle("up", r.bottom > window.innerHeight - 12);
+  }, [sroleOpen]);
+
+  const currentSiteRole = SITE_ROLES.find((r) => r.value === siteRole) ?? SITE_ROLES[1];
 
   // memberState(): what the file already knows about an address. Pending
   // invitations cannot be read back — the applied schema stores no invited
@@ -418,6 +484,25 @@ export function InviteDialog({
     return true;
   };
 
+  // applyRoleAccess(): Admins manage billing, the team and every site, so
+  // their access is fixed to All sites and there is no per-site role row.
+  // Contributors only get the sites they're given, so they start on Selected.
+  const chooseRole = (k: "admin" | "contributor") => {
+    setWrole(k);
+    setWroleOpen(false);
+    if (k === "admin") {
+      setAccess("all");
+      setSroleOpen(false);
+    } else if (workspace?.sites.length) {
+      setAccess("some");
+    }
+  };
+
+  const someDisabled = wrole === "admin" || !workspace?.sites.length;
+
+  const toggleSite = (id: string) =>
+    setSelectedIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
+
   const submit = () => {
     if (options.length && activeIdx >= 0) pick(options[activeIdx]);
     else if (typed.trim() && !addTyped()) return;
@@ -426,10 +511,13 @@ export function InviteDialog({
       emailRef.current?.focus();
       return;
     }
+    if (access === "some" && !selectedIds.length) {
+      setError("Pick at least one site.");
+      return;
+    }
   };
 
   const canSend = picked.length > 0 || EMAIL_RE.test(typed.trim()) || activeIdx >= 0;
-  const someDisabled = !workspace?.sites.length;
 
   return (
     <dialog
@@ -439,13 +527,23 @@ export function InviteDialog({
       ref={dlg.ref}
       onClose={dlg.onClose}
       onClick={dlg.backdrop}
+      onClickCapture={(e) => {
+        // The standalone file's delegated dInvite clicks: a click outside the
+        // open popover closes it before anything else handles the event.
+        const t = e.target as HTMLElement;
+        if (sroleOpen && !t.closest(".srole-pick")) setSroleOpen(false);
+        if (wroleOpen && !t.closest(".role-pick")) setWroleOpen(false);
+      }}
       onKeyDown={(e) => {
         // The standalone file's dlgInvite 'cancel' handler: Escape closes the
-        // role menu first, then the suggestion list, then the dialog.
+        // site-role popup, then the role menu, then the suggestion list.
         if (e.key !== "Escape") return;
-        if (roleOpen) {
+        if (sroleOpen) {
           e.stopPropagation();
-          setRoleOpen(false);
+          setSroleOpen(false);
+        } else if (wroleOpen) {
+          e.stopPropagation();
+          setWroleOpen(false);
         } else if (options.length) {
           e.stopPropagation();
           setOptions([]);
@@ -456,13 +554,17 @@ export function InviteDialog({
       <Form method="post" onSubmit={submit}>
         <input type="hidden" name="intent" value="invite" />
         {workspace ? <input type="hidden" name="workspaceId" value={workspace.id} /> : null}
-        <input type="hidden" name="role" value={ROLE_FOR_DB[role] ?? "editor"} />
+        <input type="hidden" name="role" value={wrole} />
+        <input type="hidden" name="access" value={access} />
+        {access === "some"
+          ? selectedIds.map((id) => <input key={id} type="hidden" name="siteId" value={id} />)
+          : null}
+        {wrole === "contributor" ? <input type="hidden" name="siteRole" value={siteRole} /> : null}
         {/* One field per picked chip. Without these the chips are display-only
             and the action receives no addresses at all. */}
         {picked.map((p) => (
           <input key={p.email} type="hidden" name="email" value={p.email} />
         ))}
-        <input type="hidden" name="access" value={access} />
 
         <div className="modal-head inv-head">
           <div className="inv-title">
@@ -536,35 +638,50 @@ export function InviteDialog({
                   type="button"
                   className="role-btn"
                   aria-haspopup="listbox"
-                  aria-expanded={roleOpen}
+                  aria-expanded={wroleOpen}
                   aria-controls="invite-role-menu"
-                  aria-label="Role"
+                  aria-label="Role in this workspace"
                   onClick={() => {
-                    setRoleActive(roleKeys.indexOf(role));
-                    setRoleOpen((o) => !o);
+                    setWroleActive(roleKeys.indexOf(wrole));
+                    setWroleOpen((o) => !o);
                   }}
                 >
-                  <span>{ROLES[role]?.label ?? "Editor"}</span>
+                  <span>{W_ROLES[wrole]?.label ?? "Admin"}</span>
                   {icon("i-chevron-down", 14, 14, "0 0 16 16")}
                 </button>
-                {roleOpen ? (
-                  <ul className="role-menu" id="invite-role-menu" role="listbox" aria-label="Role">
+                {wroleOpen ? (
+                  <ul
+                    className="role-menu"
+                    id="invite-role-menu"
+                    role="listbox"
+                    aria-label="Role in this workspace"
+                    tabIndex={-1}
+                    onKeyDown={(e) => {
+                      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                        e.preventDefault();
+                        setWroleActive((a) => (a + (e.key === "ArrowDown" ? 1 : roleKeys.length - 1)) % roleKeys.length);
+                      } else if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        chooseRole(roleKeys[wroleActive] as "admin" | "contributor");
+                      } else if (e.key === "Escape" || e.key === "Tab") {
+                        e.preventDefault();
+                        setWroleOpen(false);
+                      }
+                    }}
+                  >
                     {roleKeys.map((k, i) => (
                       <li
                         role="option"
                         id={`role-${k}`}
                         key={k}
-                        aria-selected={k === role}
-                        className={i === roleActive ? "active" : ""}
+                        aria-selected={k === wrole}
+                        className={i === wroleActive ? "active" : ""}
                         onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => {
-                          setRole(k);
-                          setRoleOpen(false);
-                        }}
+                        onClick={() => chooseRole(k as "admin" | "contributor")}
                       >
                         <span>
-                          <strong>{ROLES[k].label}</strong>
-                          <small>{ROLE_SHORT[k]}</small>
+                          <strong>{W_ROLES[k].label}</strong>
+                          <small>{W_ROLES[k].short}</small>
                         </span>
                         {icon("i-check", 16, 16, "0 0 24 24")}
                       </li>
@@ -608,19 +725,27 @@ export function InviteDialog({
             </ul>
           ) : null}
 
-          {/* syncAccess(): the site list is only shown for "Selected sites". */}
           <div className="inv-access">
             <span id="invite-access-label">Access</span>
             <div className="seg" role="radiogroup" aria-labelledby="invite-access-label">
               <label>
-                <input type="radio" name="invite-access" checked={access === "all"} onChange={() => setAccess("all")} />
-                <span>All sites</span>
-              </label>
-              <label title={someDisabled ? "This workspace has no sites yet" : ""}>
                 <input
                   type="radio"
-                  checked={access === "some"}
+                  name="invite-access"
+                  value="all"
+                  checked={access === "all"}
+                  onChange={() => setAccess("all")}
+                />
+                <span>All sites</span>
+              </label>
+              <label title={someDisabled ? (wrole === "admin" ? "Admins can access all sites" : "This workspace has no sites yet") : undefined}>
+                <input
+                  type="radio"
+                  name="invite-access"
+                  value="some"
+                  id="invite-access-some"
                   disabled={someDisabled}
+                  checked={access === "some"}
                   onChange={() => setAccess("some")}
                 />
                 <span>Selected sites</span>
@@ -628,19 +753,104 @@ export function InviteDialog({
             </div>
           </div>
 
-          {access === "some" ? (
-            <div className="site-pills" id="invite-sites">
-              {workspace?.sites.map((s) => (
-                <label key={s.id}>
-                  <input
-                    type="checkbox"
-                    checked={siteIds.includes(s.id)}
-                    onChange={(e) => setSiteIds((ids) => (e.target.checked ? [...ids, s.id] : ids.filter((i) => i !== s.id)))}
-                  />
-                  <span>{s.name}</span>
-                </label>
-              ))}
+          {/* site-pills: shown only while "Selected sites" is on. */}
+          <div className="site-pills" id="invite-sites" hidden={access !== "some"} aria-label="Sites to grant access to">
+            {workspace?.sites.map((s) => (
+              <label key={s.id}>
+                <input
+                  type="checkbox"
+                  value={s.id}
+                  checked={selectedIds.includes(s.id)}
+                  onChange={() => toggleSite(s.id)}
+                />
+                <span>{s.name}</span>
+              </label>
+            ))}
+          </div>
+
+          {/* The per-site role dropdown: hidden for an Admin, who reaches every
+            site. The chosen role is sent with the invite, though nothing in the
+            schema stores it yet. */}
+          <div className="inv-access" hidden={wrole === "admin"}>
+            <span id="srole-label">Site role</span>
+            <div className="srole-pick">
+              <button
+                ref={sroleBtnRef}
+                type="button"
+                className="srole-btn"
+                id="srole-btn"
+                aria-haspopup="listbox"
+                aria-expanded={sroleOpen}
+                aria-controls="srole-list"
+                aria-labelledby="srole-label srole-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSroleActive(SITE_ROLES.findIndex((r) => r.value === siteRole));
+                  setSroleOpen((o) => !o);
+                }}
+              >
+                <RoleTile role={currentSiteRole} size={13} />
+                <span className="lbl">{currentSiteRole.label}</span>
+                {icon("i-chevron-down", 14, 14, "0 0 16 16")}
+              </button>
+              {sroleOpen ? (
+                <div className="srole-pop" id="srole-pop" ref={srolePopRef}>
+                  <ul
+                    role="listbox"
+                    id="srole-list"
+                    tabIndex={-1}
+                    aria-labelledby="srole-label"
+                    onKeyDown={(e) => {
+                      const n = SITE_ROLES.length;
+                      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                        e.preventDefault();
+                        setSroleActive((a) => (a + (e.key === "ArrowDown" ? 1 : n - 1)) % n);
+                      } else if (e.key === "Home" || e.key === "End") {
+                        e.preventDefault();
+                        setSroleActive(e.key === "Home" ? 0 : n - 1);
+                      } else if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setSiteRole(SITE_ROLES[sroleActive].value);
+                        setSroleOpen(false);
+                      } else if (e.key === "Escape") {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setSroleOpen(false);
+                      } else if (e.key === "Tab") {
+                        setSroleOpen(false);
+                      }
+                    }}
+                  >
+                    {SITE_ROLES.map((r, i) => (
+                      <li
+                        role="option"
+                        id={`srole-opt-${r.value}`}
+                        data-srole={r.value}
+                        key={r.value}
+                        aria-selected={siteRole === r.value}
+                        className={i === sroleActive ? "active" : ""}
+                        onMouseMove={() => setSroleActive(i)}
+                        onClick={() => {
+                          setSiteRole(r.value);
+                          setSroleOpen(false);
+                        }}
+                      >
+                        <RoleTile role={r} size={16} />
+                        <span>
+                          <strong>{r.label}</strong>
+                          <small>{r.desc}</small>
+                        </span>
+                        {icon("i-check", 16, 16, "0 0 24 24")}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </div>
+          </div>
+
+          {wrole === "contributor" && workspace?.sites.length && access === "some" ? (
+            <p className="srole-note">Gives this role to the sites you selected.</p>
           ) : null}
 
           {error ?? serverError ? (

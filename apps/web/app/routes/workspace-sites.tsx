@@ -45,6 +45,16 @@ export default function WorkspaceSites() {
   const [moreOpen, setMoreOpen] = useState<string | null>(null);
 
   const creating = navigation.state === "submitting" && navigation.formData?.get("intent") === "create-site";
+
+  /* Delete used to be a plain POST: the menu stayed open and the card sat there
+     until the action round-tripped *and* the whole workspace loader re-ran, which
+     read as "the button did nothing" for seconds. Track the in-flight delete from
+     useNavigation and drop the card straight away; React Router puts it back if
+     the action comes back with an error. */
+  const deleting =
+    navigation.state !== "idle" && navigation.formData?.get("intent") === "delete-site"
+      ? String(navigation.formData.get("siteId") ?? "")
+      : null;
   const first = data.userName.split(" ")[0];
   const current = data.workspaces.find((w) => w.id === currentId);
 
@@ -169,9 +179,11 @@ export default function WorkspaceSites() {
           </button>
         </Form>
 
-        {list.map((s) => (
-          <SiteCard key={s.id} site={s} moreOpen={moreOpen === s.id} setMoreOpen={setMoreOpen} />
-        ))}
+        {list
+          .filter((s) => s.id !== deleting)
+          .map((s) => (
+            <SiteCard key={s.id} site={s} moreOpen={moreOpen === s.id} setMoreOpen={setMoreOpen} />
+          ))}
 
         {!list.length && (siteQuery || siteFilter !== "all") ? (
           <p className="empty-inline">

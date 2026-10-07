@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Outlet } from "react-router";
-import { Pmark, SidebarToggle, WorkspaceSidebar, type SidebarNavItem } from "~/components/workspace-sidebar";
+import { SidebarToggle, WorkspaceSidebar, type SidebarNavItem } from "~/components/workspace-sidebar";
+import { AccountMenu } from "~/components/account-menu";
 import { CreateWorkspaceDialog, InviteDialog } from "~/components/workspace-dialogs";
 import type { WorkspaceActionResult } from "~/lib/workspace-actions.server";
 import type { WorkspaceScreenData } from "~/lib/workspace.server";
@@ -14,12 +15,6 @@ import type { WorkspaceScreenData } from "~/lib/workspace.server";
    drawer flag lives here and is passed down. It used to be kept separately by
    both the shell and the sidebar, and two copies of one boolean can never stay
    in agreement - that is what made the menu button look broken. */
-
-const icon = (id: string, w = 16, h = w, vb = `0 0 ${w} ${h}`) => (
-  <svg width={w} height={h} viewBox={vb} fill="none" aria-hidden="true">
-    <use href={`#${id}`} />
-  </svg>
-);
 
 export type WorkspaceChrome = {
   data: WorkspaceScreenData;
@@ -121,10 +116,7 @@ export function WorkspaceShell({
                     <use href="#i-bell" />
                   </svg>
                 </button>
-                <button className="me-btn" aria-label="Account menu">
-                  <Pmark name={data.userName} email={data.email} size={32} />
-                  {icon("i-chevron-down", 16, 16, "0 0 16 16")}
-                </button>
+                <AccountMenu name={data.userName} email={data.email} />
               </>
             )}
           </header>
@@ -172,7 +164,8 @@ export function useResultToast(actionResult: WorkspaceActionResult | undefined, 
         );
       } else if ("invited" in actionResult) {
         const who = actionResult.invited > 1 ? `${actionResult.invited} people` : actionResult.emails[0];
-        setToast({ text: `Invite sent to ${who}`, label: "Preview invite", href: "/invitation" });
+        const note = actionResult.siteRolesNotStored ? " (site-specific roles aren't persisted yet)" : "";
+        setToast({ text: `Invite sent to ${who} as ${actionResult.role}${note}`, label: "Preview invite", href: "/invitation" });
       } else if (actionResult && "siteName" in actionResult && actionResult.siteName) {
         setToast({ text: `${actionResult.siteName} deleted` });
       } else if ("error" in actionResult && actionResult.error) {

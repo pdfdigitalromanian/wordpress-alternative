@@ -7,7 +7,18 @@ const apiPort = 5188;
 const appPort = 5189;
 const api = `http://127.0.0.1:${apiPort}`;
 const siteId = "11111111-1111-4111-8111-111111111111";
-const user = { id: "22222222-2222-4222-8222-222222222222", email: "owner@example.test", aud: "authenticated", role: "authenticated", app_metadata: {}, user_metadata: {}, created_at: new Date().toISOString() };
+const workspaceId = "workspace-1";
+/* A fully onboarded account: it has a display_name and a workspace membership,
+   which is what landingFor() checks, so signing in lands on the workspace
+   screen instead of stranding the test on /onboarding/profile. */
+const user = { id: "22222222-2222-4222-8222-222222222222", email: "owner@example.test", aud: "authenticated", role: "authenticated", app_metadata: {}, user_metadata: { display_name: "Test Owner" }, created_at: new Date().toISOString() };
+/* Two colleagues, so the workspace shell's member table, its role counts and the
+   invite suggestions all have more than one row to render. They are only ever
+   reachable through workspace_memberships, exactly like the real directory. */
+const colleagues = [
+  { id: "33333333-3333-4333-8333-333333333333", email: "admin@example.test", user_metadata: { display_name: "Ana Popescu" } },
+  { id: "44444444-4444-4444-8444-444444444444", email: "editor@example.test", user_metadata: { display_name: "Mihai Ionescu" } },
+];
 const key = Buffer.alloc(32, 7);
 const nonce = randomBytes(12);
 const cipher = createCipheriv("aes-256-gcm", key, nonce);
@@ -18,7 +29,13 @@ let tables, role, productWrites, saveFailure;
 function reset() {
   role = "owner"; productWrites = []; saveFailure = false;
   tables = {
-    sites: [{ id: siteId, name: "Feature test site", slug: "feature-test", workspace_id: "workspace-1", active_release_id: null }],
+    workspaces: [{ id: workspaceId, name: "Test workspace", slug: "test", created_at: "2026-01-01T00:00:00.000Z" }],
+    workspace_memberships: [
+      { id: "membership-owner", workspace_id: workspaceId, user_id: user.id, role: "owner", created_at: "2026-01-01T00:00:00.000Z" },
+      { id: "membership-admin", workspace_id: workspaceId, user_id: colleagues[0].id, role: "administrator", created_at: "2026-01-01T00:00:00.000Z" },
+      { id: "membership-editor", workspace_id: workspaceId, user_id: colleagues[1].id, role: "editor", created_at: "2026-01-01T00:00:00.000Z" },
+    ],
+    sites: [{ id: siteId, name: "Feature test site", slug: "feature-test", workspace_id: workspaceId, active_release_id: null }],
     pages: [{ id: "home-page", site_id: siteId, title: "Home", slug: "", draft_document: blank(), draft_updated_at: "2026-01-01T00:00:00.000Z", created_at: "2026-01-01T00:00:00.000Z" }],
     releases: [], release_pages: [], site_domains: [{ site_id: siteId, hostname: "localhost", verified_at: "2026-01-01", is_primary: true }],
     public_site_by_hostname: [{ hostname: "localhost", site_id: siteId }],
@@ -42,6 +59,11 @@ const server = createServer(async (req, res) => {
     return json({ access_token: token, token_type: "bearer", expires_in: 3600, refresh_token: "fixture-refresh", user });
   }
   if (url.pathname === "/auth/v1/user") return json(user);
+  // The service-role user list the workspace loader reads to resolve member
+  // display names. Only the three accounts of this fixture exist.
+  if (url.pathname === "/auth/v1/admin/users") {
+    return json({ users: [user, ...colleagues].map(u => ({ ...u, aud: "authenticated", role: "authenticated", app_metadata: {}, created_at: new Date().toISOString() })), aud: "authenticated" });
+  }
   if (url.pathname === "/auth/v1/logout") return json({});
   if (url.pathname === "/rest/v1/rpc/workspace_role_of") return json(role);
   if (url.pathname === "/rest/v1/rpc/publish_site") {
@@ -60,10 +82,20 @@ const server = createServer(async (req, res) => {
   }
   if (url.pathname.startsWith("/rest/v1/")) {
     const name = url.pathname.split("/").pop();
-    if (name === "workspaces") return json([{ id: "workspace-1", name: "Test workspace", slug: "test", sites: tables.sites.map(site => ({ ...site, site_domains: tables.site_domains })) }]);
+    const select = url.searchParams.get("select") || "";
     if (!tables[name]) return json([]);
     const matches = row => [...url.searchParams.entries()].every(([key, value]) => !value.startsWith("eq.") || String(row[key]) === value.slice(3));
     let rows = tables[name].filter(matches);
+    // PostgREST embeds a related row when the select asks for it. Two selects
+    // in the app depend on that: workspaces(id, ...) on workspace_memberships
+    // (which is what fills the shell's workspace list) and sites(id, name) on
+    // workspaces (the invite dialog's site list).
+    if (name === "workspace_memberships" && select.includes("workspaces(")) {
+      rows = rows.map(row => ({ ...row, workspaces: tables.workspaces.find(w => w.id === row.workspace_id) ?? null }));
+    }
+    if (name === "workspaces" && select.includes("sites(")) {
+      rows = rows.map(row => ({ ...row, sites: tables.sites.filter(s => s.workspace_id === row.id).map(s => ({ ...s, site_domains: tables.site_domains })) }));
+    }
     if (req.method === "POST") {
       if (name === "pages" && tables.pages.some(page => page.site_id === body.site_id && page.slug === body.slug)) return json({ code: "23505", message: "duplicate path" }, 409);
       const row = { id: randomUUID(), created_at: new Date().toISOString(), draft_updated_at: new Date().toISOString(), ...body }; tables[name].push(row); rows = [row];

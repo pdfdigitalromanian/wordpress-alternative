@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Form, redirect, useActionData, useNavigate, useNavigation } from "react-router";
+import { Form, redirect, useActionData, useLoaderData, useNavigate, useNavigation } from "react-router";
 import { createSupabaseServerClient } from "~/lib/supabase.server";
 import type { Route } from "./+types/onboarding-profile";
 
@@ -20,45 +20,74 @@ export async function loader({ request }: Route.LoaderArgs) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) throw redirect("/login");
-  return { email: user.email ?? "" };
+
+  /* Prefill from whatever the auth user already holds. The account menu's
+     "Edit profile" link points here, so somebody who already set a name up
+     during onboarding would otherwise be shown a blank form every time and
+     have to retype it. user_metadata is the same source the avatar and the
+     greeting read, so the form starts out showing what the rest of the app
+     already displays. */
+  const meta = user.user_metadata ?? {};
+  return {
+    email: user.email ?? "",
+    name: String(meta.display_name ?? ""),
+    username: String(meta.username ?? ""),
+    photo: String(meta.avatar_url ?? ""),
+  };
 }
 
 export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   const name = String(formData.get("name") ?? "").trim();
   const username = String(formData.get("username") ?? "").trim();
-  const photo = String(formData.get("photo") ?? "");
 
   if (!name) return { error: "Add a display name so your team knows who you are." };
 
-  const { supabase } = createSupabaseServerClient(request);
+  const { supabase, headers } = createSupabaseServerClient(request);
 
   // There is no profiles table in the schema yet (workspaces,
   // workspace_memberships, sites, site_domains, pages, releases only), so the
   // profile is stored on the auth user for now. Moving it to a real profiles
   // table later does not change this screen.
+  //
+  // The photo is deliberately NOT persisted: user_metadata is copied into the
+  // access-token JWT, and @supabase/ssr stores the session in cookies, so any
+  // image bytes here blow the cookie/header size limits and lock the account
+  // out. The picker below is a front-end-only preview until avatars move to
+  // Supabase Storage. We also pin avatar_url to null so any legacy oversized
+  // value is cleared on the next save.
   const { error } = await supabase.auth.updateUser({
     data: {
       display_name: name,
       username,
-      avatar_url: photo || null,
+      avatar_url: null,
     },
   });
 
   if (error) return { error: "We couldn't save your profile. Try again in a moment." };
 
-  throw redirect("/onboarding/workspace");
+  /* updateUser() refreshes the session, so the new JWT - which carries the
+     display_name in its user_metadata claim - arrives as a Set-Cookie header
+     collected during the call above. Redirecting without those headers leaves
+     the browser holding the previous token, whose user_metadata still has no
+     display_name; landingFor() then reads that stale claim, decides the user
+     has no profile and sends them straight back here. That is the loop that
+     made the saved name not show up. */
+  throw redirect("/onboarding/workspace", { headers });
 }
 
 export default function OnboardingProfile() {
   const actionData = useActionData<typeof action>();
+  const { email, name: savedName, username: savedUsername, photo: savedPhoto } = useLoaderData<typeof loader>();
   const navigation = useNavigation();
   const submitting = navigation.state === "submitting";
 
   const fileInput = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
-  const [name, setName] = useState("");
-  const [photo, setPhoto] = useState("");
+  /* Seeded from the loader, so "Edit profile" from the account menu opens on
+     the values already stored rather than an empty form. */
+  const [name, setName] = useState(savedName);
+  const [photo, setPhoto] = useState(savedPhoto);
 
   const letter = initials(name).slice(0, 1);
 
@@ -71,8 +100,6 @@ export default function OnboardingProfile() {
           <p className="auth-lead">This is how teammates will see you across Digital Romanian.</p>
 
           <Form method="post" className="auth-form" noValidate>
-            <input type="hidden" name="photo" value={photo} />
-
             <div className="picker center">
               <label className="picker-mark">
                 <span className="picker-face">
@@ -141,7 +168,7 @@ export default function OnboardingProfile() {
               </div>
               <div className="input-group">
                 <span className="prefix">@</span>
-                <input id="profile-username" name="username" autoComplete="username" spellCheck={false} placeholder="alexradu" />
+                <input id="profile-username" name="username" autoComplete="username" spellCheck={false} placeholder="alexradu" defaultValue={savedUsername} />
               </div>
             </div>
 

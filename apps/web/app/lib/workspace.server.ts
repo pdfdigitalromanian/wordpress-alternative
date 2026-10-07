@@ -1,6 +1,6 @@
 import type { User } from "@supabase/supabase-js";
 import { createSupabaseAdminClient, createSupabaseServerClient } from "./supabase.server";
-import { landingFor } from "./landing";
+import { ONBOARDING_PROFILE, ONBOARDING_WORKSPACE, WORKSPACE_HOME } from "./landing";
 import { themeForSite } from "./site-theme";
 
 /* One loader for the whole workspace shell. /workspace, /templates, /team and
@@ -24,14 +24,22 @@ const DIRECTORY_TTL_MS = 60_000;
 let directoryCache: { at: number; users: User[] } | null = null;
 
 async function authUserDirectory(neededIds: string[]): Promise<User[]> {
+  const users = await cachedAuthDirectory();
   if (!neededIds.length) return [];
+  const wanted = new Set(neededIds);
+  return users.filter((u) => wanted.has(u.id));
+}
+
+/** The full auth user list, cached in process memory (see DIRECTORY_TTL_MS).
+ *  Shared by the workspace loader and the invite action so an invite POST does
+ *  not pay for a second read of the same list the shell just resolved. Only
+ *  cached on success: a failed call is retried next time rather than
+ *  remembered as "no one exists" for a whole minute. */
+export async function cachedAuthDirectory(): Promise<User[]> {
   const now = Date.now();
   if (directoryCache && now - directoryCache.at < DIRECTORY_TTL_MS) return directoryCache.users;
-
   const { data } = await createSupabaseAdminClient().auth.admin.listUsers({ perPage: 1000 });
   const users = data?.users ?? [];
-  // Only cached on success: a failed call should be retried next time rather
-  // than remembered as "this account has no colleagues" for a whole minute.
   if (users.length) directoryCache = { at: now, users };
   return users;
 }
@@ -148,34 +156,36 @@ export async function loadWorkspaceScreen(request: Request): Promise<WorkspaceSc
       email: user.email ?? "",
       workspaces,
       directory: [],
-      landing: await landingFor(request, user),
+      landing: landingFor(user, false),
     };
   }
 
   // The invite dialog's suggestion list, the file's demo DIRECTORY. Only
   // addresses the signed-in user is already allowed to see are returned, and
-  // they are matched by membership, never by a global user list.
-  const { data: colleagueRows } = await supabase
-    .from("workspace_memberships")
-    .select("user_id, role, workspace_id")
-    .in("workspace_id", ids);
+  // they are matched by membership, never by a global user list. The two
+  // remaining independent reads (colleagues + sites) run together instead of
+  // one after the other.
+  const [colleagueResult, siteResult] = await Promise.all([
+    supabase.from("workspace_memberships").select("user_id, role, workspace_id").in("workspace_id", ids),
+    supabase
+      .from("sites")
+      .select("id, workspace_id, name, created_at, updated_at, active_release_id")
+      .in("workspace_id", ids)
+      // Stable order: the drawn previews below are handed out by position, so
+      // without this the rotation could reshuffle between two loads.
+      .order("created_at", { ascending: true }),
+  ]);
+  const colleagueRows = colleagueResult.data;
+  const siteRows = siteResult.data;
 
   const colleagueIds = (colleagueRows ?? [])
     .map((m) => m.user_id)
     .filter((id): id is string => Boolean(id));
-  // Display names for colleagues come from the service-role client; a
+  // Display names for colleagues come from the cached service-role list; a
   // user-scoped client cannot read the auth user list at all. Failing to get
   // it is not fatal: the Team view falls back to the local part of the address
   // the membership is matched by.
   const profileById = new Map((await authUserDirectory(colleagueIds)).map((u) => [u.id, u]));
-
-  const { data: siteRows } = await supabase
-    .from("sites")
-    .select("id, workspace_id, name, created_at, updated_at, active_release_id")
-    .in("workspace_id", ids)
-    // Stable order: the drawn previews below are handed out by position, so
-    // without this the rotation could reshuffle between two loads.
-    .order("created_at", { ascending: true });
 
   const byId = new Map(workspaces.map((w) => [w.id, w]));
 
@@ -256,8 +266,17 @@ export async function loadWorkspaceScreen(request: Request): Promise<WorkspaceSc
     email: user.email ?? "",
     workspaces,
     directory: [...directory.values()],
-    landing: await landingFor(request, user),
+    landing: landingFor(user, true),
   };
+}
+
+/** The same decision landing.ts's landingFor makes, but from data this loader
+ *  already holds, so the shell (and every revalidation after a POST) neither
+ *  re-instantiates the auth client nor re-runs the membership query just to
+ *  choose a redirect target. Shared with the no-workspaces branch above. */
+function landingFor(user: User, hasWorkspaces: boolean) {
+  if (!String(user.user_metadata?.display_name ?? "")) return ONBOARDING_PROFILE;
+  return hasWorkspaces ? WORKSPACE_HOME : ONBOARDING_WORKSPACE;
 }
 
 /** Activity is derived from existing columns in the loader, so there is no

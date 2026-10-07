@@ -287,3 +287,48 @@ pickers must receive their scoped data source before mounting, and editor
 navigation must track authored changes immediately plus the version of the
 in-flight save. A product selection followed immediately by Preview now waits
 for the latest draft rather than leaving on an older save acknowledgment.
+
+## Workspace/admin UI parity + overview pixel-match — 6 October 2026
+
+Worked from `digital-romanian-screen.html` (the prototype) as the source of
+truth to bring the workspace admin screens and the site **overview** into
+visual parity. All changes are presentation + a delete-latency fix; no
+migrations, no hosted writes, nothing deployed.
+
+- **Settings screen** rewritten to match the prototype (slug uniqueness fixed,
+  `.owner-badge` gated by `isOwner`, save validates name+slug client- and
+  server-side). Transfer-ownership and delete-workspace dialogs match the
+  prototype's typed-confirmation flows.
+- **Overview screen** (`overview.tsx`) aligned to the prototype's
+  `<section data-route="/overview">`:
+  - restored the prototype's overview-scoped "pixel-matched" CSS block
+    (prototype lines 1341-1469) into `digital-romanian.css`, scoped to
+    `[data-route="/overview"]`, and added `data-route="/overview"` to the
+    `.app` wrapper;
+  - topbar no longer shows a workspace crumb or `/` separators — `nav.crumbs`
+    is the site switcher + `tb-extras` domain chip directly;
+  - `HealthRing` uses `r=47`/`stroke-width:6` (`C = 2π·47`);
+  - inline 18×18 Overview (home) and Media icons, matching the prototype;
+  - `ov-foot` workspace switcher wraps the mark in `.ws-switch-mark` and uses
+    `strong.ws-switch-name`;
+  - `AccountMenu` gained a `size` prop (default 32); overview passes `22`.
+- **Root cause of residual a few-px height drift:** the app's Tailwind
+  preflight sets `line-height: 1.5` globally, while the prototype inherits the
+  browser default `normal`. Restored the prototype value within the overview
+  (`[data-route="/overview"] .ov`, `.tb-domain`) rather than changing global
+  line-height.
+- **Site deletion latency** (`workspace-sites.tsx`): the card now disappears
+  immediately on delete via `useNavigation` (`intent === "delete-site"`) and an
+  optimistic filter on the list, with React Router restoring it on error,
+  instead of waiting for the round trip.
+
+Verification (this session, all against the built app + isolated local service
+doubles): TypeScript clean; production build clean; **all 15 Playwright feature
+flows pass** (previously 9 in the last recorded run — the suite now also covers
+role change, settings save, ownership transfer and workspaced deletion).
+Overview parity was verified without screenshots (the model cannot read images):
+rendered DOM/class skeletons and computed styles were captured from the
+prototype and the running app at 1440x900 and diffed. All structural and
+computed-style differences now match; the only remaining deltas are
+data-driven (the fixture site is a draft/offline so it shows 3 issues vs the
+prototype's 2, and its first status pill is grey rather than orange).

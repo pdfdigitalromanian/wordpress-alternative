@@ -27,8 +27,8 @@ export async function action({ request }: Route.ActionArgs) {
   if (password.length < 8) return { error: "Password must be at least 8 characters.", email };
   if (password !== confirm) return { error: "Passwords do not match.", email };
 
-  const { supabase } = createSupabaseServerClient(request);
-  const { error } = await supabase.auth.signUp({ email, password });
+  const { supabase, headers } = createSupabaseServerClient(request);
+  const { data, error } = await supabase.auth.signUp({ email, password });
 
   if (error) {
     // Supabase reports "user already registered" - keep it generic rather than
@@ -36,7 +36,19 @@ export async function action({ request }: Route.ActionArgs) {
     return { error: "We couldn't create that account. Try signing in instead.", email };
   }
 
-  throw redirect("/signup/created");
+  /* When email confirmation is switched off in the Supabase project,
+     signUp() returns a session immediately and that session is written to a
+     Set-Cookie header collected while the client ran. Without passing those
+     headers on the redirect the cookie is thrown away, the next request is
+     anonymous, and /onboarding/profile bounces straight back to /login - which
+     is exactly the "signed up but never saw the profile screen" report. Same
+     pattern as login.tsx and logout.tsx. */
+  throw redirect("/signup/created", { headers });
+
+  /* With confirmation enabled there is no session yet (data.session is null)
+     and the browser has no cookie to carry, so the user has to sign in once
+     before onboarding. That is expected and needs no extra handling here. */
+  void data;
 }
 
 export default function SetUpPassword() {

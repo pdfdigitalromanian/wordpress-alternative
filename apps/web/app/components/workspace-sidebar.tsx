@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Form, Link, NavLink, useNavigate } from "react-router";
+import { Link, NavLink, useNavigate } from "react-router";
 import type { WorkspaceScreenData, WorkspaceRow } from "~/lib/workspace.server";
 
 /* The one sidebar used by /workspace (and its Templates, Team and General
@@ -217,20 +217,10 @@ export function WorkspaceSidebar({
                     Invite member
                   </button>
                 )}
-                <Form method="post" action="/logout">
-                  <button type="submit" className="create-site switcher-signout">
-                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-                      <path
-                        d="M12 3.75H4.5A1.5 1.5 0 0 0 3 5.25v7.5A1.5 1.5 0 0 0 4.5 14.25H12M8.25 9h6.75M12.75 6.75 15 9l-2.25 2.25"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                    Sign out
-                  </button>
-                </Form>
+                {/* No Sign out row here: digital-romanian-screen.html line 872
+                    puts it in the profile dropdown ("sign out lives here, not in
+                    the workspace switcher"). It is reachable from the
+                    .me-menu AccountMenu renders in the same header. */}
               </div>
             </div>
           </div>
