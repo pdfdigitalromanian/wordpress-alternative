@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { Form, Link } from "react-router";
+import { Form, Link, useLocation } from "react-router";
 import { Pmark } from "~/components/workspace-sidebar";
 
 /* The top-right profile dropdown (.me-wrap / .me-btn / .me-menu) from
@@ -12,7 +12,7 @@ import { Pmark } from "~/components/workspace-sidebar";
 
    The three rows are fixed by the design:
      - head: name over email, above a hairline
-     - Edit profile            -> /onboarding/profile
+     - Edit profile            -> /onboarding/profile?returnTo=<current>
      - Workspace settings      -> /settings
      - Sign out (danger)       -> POST /logout
 
@@ -48,6 +48,7 @@ export function AccountMenu({ name, email, size = 32 }: { name: string; email: s
   const wrapRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuId = useId();
+  const location = useLocation();
 
   useEffect(() => {
     if (!open) return;
@@ -92,7 +93,7 @@ export function AccountMenu({ name, email, size = 32 }: { name: string; email: s
             <small>{email || "No email"}</small>
           </div>
         </div>
-        <Link to="/onboarding/profile" onClick={() => setOpen(false)}>
+        <Link to={`/onboarding/profile?returnTo=${encodeURIComponent(location.pathname + location.search)}`} onClick={() => setOpen(false)}>
           {icon("i-person", 16, 16, "0 0 16 16")}
           Edit profile
         </Link>

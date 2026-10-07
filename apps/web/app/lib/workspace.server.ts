@@ -151,13 +151,12 @@ export async function loadWorkspaceScreen(request: Request): Promise<WorkspaceSc
 
   const ids = workspaces.map((w) => w.id);
   if (!ids.length) {
-    return {
-      userName: displayName(String(user.user_metadata?.display_name ?? ""), user.email ?? ""),
-      email: user.email ?? "",
-      workspaces,
-      directory: [],
-      landing: landingFor(user, false),
-    };
+    /* No workspace yet: walk the onboarding order here too. Without this the
+       shell rendered empty for an account that reached a workspace path (deep
+       link, stale tab, the ?returnTo carried into /login) - which is the
+       "why do I see the workspace first" report. landingFor() sends a user with
+       no profile to the profile step first, then to the workspace step. */
+    throw new Response(null, { status: 302, headers: { Location: landingFor(user, false) } });
   }
 
   // The invite dialog's suggestion list, the file's demo DIRECTORY. Only

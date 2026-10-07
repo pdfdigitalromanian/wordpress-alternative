@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Form, Link, redirect, useActionData, useNavigation } from "react-router";
-import { landingFor } from "~/lib/landing";
+import { landingFor, WORKSPACE_HOME } from "~/lib/landing";
 import { createSupabaseServerClient } from "~/lib/supabase.server";
 import type { Route } from "./+types/login";
 
@@ -17,15 +17,29 @@ function returnTo(request: Request) {
   return path;
 }
 
-export async function loader({ request }: Route.LoaderArgs) {
+/* Where a signed-in user should actually land. Onboarding screens always win:
+   a fresh account that arrived via /login?returnTo=/workspace (site-access
+   sends signed-out visitors there from any protected path) must still be sent
+   through profile -> workspace before the workspace itself. Only once
+   landingFor() is happy with a fully onboarded user does a requested
+   destination take effect. */
+async function landingDestination(request: Request, user: NonNullable<Awaited<ReturnType<typeof currentUser>>>) {
+  const landing = await landingFor(request, user);
+  if (landing !== WORKSPACE_HOME) return landing;
+  return returnTo(request) ?? landing;
+}
+
+async function currentUser(request: Request) {
   const { supabase } = createSupabaseServerClient(request);
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (user) {
-    const path = returnTo(request);
-    throw redirect(path ?? (await landingFor(request, user)));
-  }
+  return user;
+}
+
+export async function loader({ request }: Route.LoaderArgs) {
+  const user = await currentUser(request);
+  if (user) throw redirect(await landingDestination(request, user));
   return null;
 }
 
@@ -71,9 +85,7 @@ export async function action({ request }: Route.ActionArgs) {
   // No profile yet or no workspace yet means the HTML flow still has screens
   // to show, so those win over any requested destination.
   if (signedIn) {
-    throw redirect(returnTo(request) ?? (await landingFor(request, signedIn)), {
-      headers,
-    });
+    throw redirect(await landingDestination(request, signedIn), { headers });
   }
 
   // signInWithPassword succeeded but getUser() came back empty: fall back to the

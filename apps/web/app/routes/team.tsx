@@ -295,7 +295,7 @@ export default function WorkspaceTeam() {
                   <div className="more-menu" hidden={openMenu !== key}>
                     {m.you ? (
                       <>
-                        <a href="/onboarding/profile">Edit your profile</a>
+                        <a href="/onboarding/profile?returnTo=/team">Edit your profile</a>
                         <a href="/settings">Workspace settings</a>
                       </>
                     ) : canManage ? (
