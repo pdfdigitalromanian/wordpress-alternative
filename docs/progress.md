@@ -430,3 +430,40 @@ times; an HTML-vs-APP computed-style diff over the overview at
 data-driven — the fixture site is draft/offline — or the app's deliberate
 "stack tables below 1200px" choice). All temporary probe specs/configs
 (`shots-tmp`, `perf-tmp`, `playwright.tmp`/`devtmp`, `shots/`) removed.
+
+## Checkout Settings port + Orders "View" desktop alignment — 10 October 2026
+
+Ported the prototype's **Checkout Settings** screen (`#/overview/checkout`)
+and corrected the Orders table's "View" action alignment. Presentation only;
+no migrations, no hosted writes, nothing deployed.
+
+- **Checkout Settings** (`overview-screens.tsx`, `overview.tsx`,
+  `overview.css`): added exported `Checkout`/`ShippingZone` types plus
+  `CheckoutView`/`ShipDialog` and `generateCheckout`, mirroring the
+  prototype's `renderCheckoutView()` and `#dlg-ship` dialog one-for-one —
+  Paystack/COD gateway toggles with key masking and "keep one channel on"
+  guard, shipping zones list with add/edit/delete + Undo toast and the
+  "No shipping rates yet" empty state. State is held per-site in
+  `overview.tsx` (`checkoutBySite`) so edits survive moving between store
+  views; the sidebar's "Checkout Settings" is now a real link and the store
+  group opens on it.
+- **Orders "View" alignment** (`overview.css`, mirrored into
+  `digital-romanian-screen.html`): the desktop table had
+  `.otab-row .o-act { justify-self: end }`, shoving View to the right edge
+  while the "Actions" column head sits left. The base rule stays `end` (the
+  stacked mobile/tablet rows keep their right-aligned action) and a new
+  desktop-only rule — `@media (min-width: 1201px) { .otab-row .o-act
+  { justify-self: start } }` in the app, `min-width: 1101px` in the HTML —
+  aligns View under the Actions head. First attempt dropped the base rule to
+  `start`, which out-specified the `≤760` action rule and broke the mobile
+  layout; the media-scoped override fixes desktop only.
+
+Verification: `pnpm typecheck` clean and production build clean; a temporary
+Playwright geometry spec (deleted after) confirmed the desktop View's left
+edge equals the "Actions" header (`x=1214.98` at 1400px) and the mobile View
+stays flush right at 390px, with a 12-width sweep (320→1400) showing the
+action right-aligned everywhere below 1200px.
+
+**Security note:** a GitHub PAT was exposed in this session's transcript and
+used once for a push; it must be **revoked/rotated**. It was never written to
+any committed file.

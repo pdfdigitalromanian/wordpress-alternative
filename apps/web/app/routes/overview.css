@@ -3332,6 +3332,13 @@ textarea.pf-input { height: 56px; padding: 8px 10px; resize: vertical; line-heig
 .otab-row .o-ful { padding-right: 16px; }
 .otab-row .o-act { justify-self: end; }
 
+/* Desktop table only: the View action sits under the "Actions" column head
+   (left), instead of being pushed to the right edge. Scoped to >1200px so the
+   stacked mobile/tablet rows keep their right-aligned action. */
+@media (min-width: 1201px) {
+  .otab-row .o-act { justify-self: start; }
+}
+
 /* ≤ 1100px: card headers stack instead of squeezing the search box */
 @media (max-width: 1100px) {
   .pcard-head, .ccard-head { grid-template-columns: minmax(0, 1fr) !important; row-gap: 14px; }
@@ -3471,5 +3478,177 @@ textarea.pf-input { height: 56px; padding: 8px 10px; resize: vertical; line-heig
     gap: 4px 10px;
     padding: 10px 6px;
   }
+}
+
+/* =====================================================================
+   E-Commerce / Store → Checkout Settings (#/overview/checkout) and its
+   Add / edit shipping rate dialog (#dlg-ship). Ported verbatim from
+   digital-romanian-screen.html.
+   ===================================================================== */
+.ck-card { margin-top: 18px; padding: 22px 14px 28px; border-color: rgb(0 0 0 / .2) !important; }
+.ck-card > header { display: block; padding: 0 0 0 0; }
+.ov .ck-card > header h2 { font-size: 19px; font-weight: 500; }
+.ck-card > header p { font-size: 11.5px; color: #191919; margin-top: 4px; }
+.ck-sec { font-size: 15px; font-weight: 500; color: #000; margin: 34px 0 10px; display: flex; align-items: baseline; gap: 8px; }
+.ck-sec small { font-size: 9.5px; font-weight: 500; color: #0f9d58; }
+.ck-box { border: 1px solid rgb(0 0 0 / .1); border-radius: 8px; padding: 6px 32px 6px 12px; }
+.gw { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px 24px; padding: 16px 0; }
+.gw + .gw { border-top: 1px solid rgb(0 0 0 / .1); }
+.gw-main { display: flex; gap: 10px; align-items: flex-start; min-width: 0; }
+.gw-main input { width: 14px; height: 14px; margin: 3px 0 0; accent-color: #1fae5b; flex-shrink: 0; cursor: pointer; }
+.gw-main label { cursor: pointer; }
+.gw-main strong { font-size: 13px; font-weight: 500; color: #000; }
+.gw-main .st { font-size: 13px; margin-left: 8px; color: #1fae5b; }
+.gw-main .st.off { color: #8c8c83; }
+.gw-main small { display: block; font-size: 10.5px; line-height: 1.5; color: #191919; margin-top: 6px; }
+.gw-keys { display: flex; gap: 8px; align-items: center; }
+.gw-keys input { width: 204px; height: 36px; padding: 0 10px; border: 1px solid rgb(0 0 0 / .2); border-radius: 4px; font-size: 11px; background: #fff; }
+.gw-keys input::placeholder { color: #9a9a92; font-size: 9.5px; }
+.gw-keys input:focus { border-color: var(--ink); }
+.gw-keys .btn-light { height: 36px; font-size: 12px; padding: 0 12px; }
+.gw-keys .btn-light[hidden] { display: none; }
+.gw-keys .saved { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 500; color: #186244; }
+.ck-box.zones { padding: 14px 32px 16px 12px; }
+.zlist { display: grid; }
+.zone { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 34px; font-size: 13px; color: #000; }
+.zone .zn { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.zone .zn::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: #000; flex-shrink: 0; }
+.zone .zn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zone .zp { font-weight: 600; }
+.zone .zp.calc { font-weight: 400; }
+.zone .zp small { display: block; font-weight: 400; font-size: 11px; color: var(--muted); margin-top: 2px; }
+.zone .menu-anchor .more-btn { opacity: .7; }
+.zone:hover .menu-anchor .more-btn { opacity: 1; }
+.zfoot { display: flex; justify-content: flex-end; margin-top: 14px; }
+.zfoot .btn-light { height: 38px; width: 162px; justify-content: center; font-size: 11.5px; gap: 6px; }
+.ck-save-row { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+
+/* Add / edit shipping rate dialog */
+.modal-ship { width: min(565px, calc(100vw - 24px)); border-radius: 12px; }
+.modal-ship form { padding: 22px 20px 24px; overflow-y: auto; }
+.modal-ship .pf-head h2 { font-size: 18px; }
+.sr-field { margin-top: 20px; }
+.sr-field > label, .sr-field legend { display: block; font-size: 11px; font-weight: 500; color: #000; margin-bottom: 8px; padding: 0; }
+.modal-ship .pf-input { height: 32px; border-width: .5px; border-color: rgb(0 0 0 / .2); }
+.modal-ship select.pf-input { height: 38px; padding-left: 13px; font-size: 11px; }
+fieldset.sr-field { border: 0; margin: 20px 0 0; padding: 0; min-width: 0; }
+.ptype { display: grid; gap: 6px; }
+.ptype .pt[hidden] { display: none; }
+.ptype .pt { display: grid; grid-template-columns: 160px minmax(0, 1fr); align-items: center; gap: 12px; min-height: 20px; }
+.ptype label.r { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #000; cursor: pointer; }
+.ptype label.r input { width: 12px; height: 12px; margin: 0; accent-color: #1fae5b; }
+.ptype .hint { font-size: 10px; color: #3d3d39; }
+.ptype .amt { display: flex; align-items: center; max-width: 150px; height: 22px; border: .5px solid rgb(0 0 0 / .2); border-radius: 3px; background: #fff; }
+.ptype .amt span { padding: 0 2px 0 6px; font-size: 11px; font-weight: 600; }
+.ptype .amt input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; font-size: 11px; font-weight: 600; padding: 0 6px 0 0; }
+.ptype .amt:focus-within { border-color: var(--ink); }
+.ptype .amt[aria-invalid="true"] { border-color: #b42318; }
+.ptype .amt.dim { opacity: .45; }
+.regions { display: grid; grid-template-columns: repeat(4, max-content); gap: 10px 28px; padding-left: 14px; }
+.regions label { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #000; cursor: pointer; }
+.regions input { width: 14px; height: 14px; margin: 0; accent-color: #1fae5b; }
+.regions-add { display: flex; gap: 8px; margin: 10px 0 0 14px; max-width: 320px; }
+.regions-add .pf-input { height: 28px; font-size: 11px; }
+.regions-add .btn-light { height: 28px; font-size: 11px; padding: 0 10px; flex-shrink: 0; }
+.sr-note { font-size: 10px; color: #3d3d39; margin: 8px 0 0 14px; }
+.modal-ship .pf-foot { margin-top: 30px; }
+.modal-ship .pf-foot .pf-btn { width: 98px; height: 28px; font-size: 10.5px; }
+@media (max-width: 760px) {
+  .ck-card { padding: 16px 12px 20px; }
+  .ck-box, .ck-box.zones { padding: 6px 12px; }
+  .gw { grid-template-columns: minmax(0, 1fr); }
+  .gw-keys { padding-left: 24px; flex-wrap: wrap; }
+  .gw-keys input { flex: 1 1 180px; width: auto; height: 44px; font-size: 16px; }
+  .gw-keys .btn-light { height: 44px; }
+  .zone { grid-template-columns: minmax(0, 1fr) auto; padding: 8px 0; }
+  .zone .zp { grid-column: 1; padding-left: 15px; }
+  .zone .menu-anchor { grid-column: 2; grid-row: 1 / span 2; }
+  .zone + .zone { border-top: 1px solid rgb(0 0 0 / .06); }
+  .zfoot .btn-light { width: 100%; height: 44px; font-size: 13px; }
+}
+@media (max-width: 480px) {
+  .modal-ship form { padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px)); }
+  .sr-field > label, .sr-field legend { font-size: 13px; }
+  .modal-ship .pf-input, .modal-ship select.pf-input { height: 44px; font-size: 16px; }
+  .ptype .pt { grid-template-columns: minmax(0, 1fr); }
+  .ptype label.r { font-size: 14px; }
+  .ptype .hint { font-size: 12px; padding-left: 26px; }
+  .ptype .amt { height: 40px; margin-left: 26px; max-width: 200px; }
+  .ptype .amt span, .ptype .amt input { font-size: 16px; }
+  .regions { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-left: 0; gap: 12px; }
+  .regions label { font-size: 14px; }
+  .sr-note { margin-left: 0; font-size: 12px; }
+  .modal-ship .pf-foot .pf-btn { height: 46px; font-size: 14px; width: auto; flex: 1; }
+  .modal-ship .sr-del { flex-basis: 100%; text-align: left; margin-bottom: 4px; }
+  .modal-ship .pf-foot { flex-wrap: wrap; }
+}
+
+/* ---- Checkout controls matched to Figma (green box, white tick; green radio) ---- */
+.gcheck { appearance: none; -webkit-appearance: none; width: 14px; height: 14px; margin: 0; flex-shrink: 0; border: 1px solid rgb(0 0 0 / .45); border-radius: 2px; background: #fff; cursor: pointer; display: inline-grid; place-content: center; transition: background .12s ease, border-color .12s ease; }
+.gcheck::before { content: ""; width: 9px; height: 7px; background: #fff; clip-path: polygon(14% 44%, 0 59%, 38% 100%, 100% 17%, 86% 3%, 38% 72%); transform: scale(0); transition: transform .12s ease; }
+.gcheck:checked { background: #22a95b; border-color: #22a95b; }
+.gcheck:checked::before { transform: scale(1); }
+.gcheck:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.gradio { appearance: none; -webkit-appearance: none; width: 9px; height: 9px; margin: 0; flex-shrink: 0; border: 1px solid rgb(0 0 0 / .5); border-radius: 50%; background: #fff; cursor: pointer; display: inline-grid; place-content: center; }
+.gradio::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: #22a95b; transform: scale(0); transition: transform .12s ease; }
+.gradio:checked { border-color: #22a95b; }
+.gradio:checked::before { transform: scale(1); }
+.gradio:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.gw-main .gcheck { margin-top: 2px; }
+.gw-main .st { color: #22a95b; }
+.gw-keys input { width: 204px; height: 36px; }
+.gw-keys input.saved-key { color: #191919; font-size: 11px; }
+.zone { cursor: pointer; border-radius: 4px; margin: 0 -8px; padding: 0 8px; min-height: 33px; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); width: 100%; text-align: left; font: inherit; font-size: 13px; color: #000; }
+.zone:hover { background: #fafaf6; }
+.zone .zp { font-weight: 600; }
+.zone .zp.calc { font-weight: 400; }
+.ck-box.zones { padding: 14px 32px 16px 12px; }
+.zfoot .btn-light { height: 38px; width: 162px; border-color: rgb(0 0 0 / .1); font-size: 10px; font-weight: 500; }
+.modal-ship { width: min(565px, calc(100vw - 24px)); border: 1px solid rgb(0 0 0 / .1); border-radius: 12px; }
+.modal-ship form { padding: 22px 25px 24px 21px; }
+.modal-ship .pf-head h2 { font-size: 18px; font-weight: 500; color: #000; }
+.modal-ship .sr-field { margin-top: 18px; }
+.modal-ship .sr-field + fieldset.sr-field, .modal-ship fieldset.sr-field { margin-top: 28px; }
+.modal-ship .sr-field > label, .modal-ship .sr-field legend { font-size: 11px; font-weight: 600; margin-bottom: 8px; }
+.modal-ship .pf-input { height: 32px; border: .5px solid rgb(0 0 0 / .2); border-radius: 4px; padding: 0 10px; font-size: 11px; }
+.modal-ship .pf-input::placeholder { font-size: 9px; color: #9a9a92; }
+.modal-ship select.pf-input { height: 38px; padding: 0 13px; font-size: 9px; }
+.ptype { gap: 8px; padding-left: 8px; }
+.ptype .pt { grid-template-columns: 158px minmax(0, 1fr); min-height: 14px; }
+.ptype label.r { gap: 10px; font-size: 10px; }
+.ptype .hint { font-size: 10px; color: #5c5c57; }
+.ptype .amt { max-width: 150px; height: 16px; border-radius: 2px; }
+.ptype .amt span, .ptype .amt input { font-size: 10px; }
+.regions { grid-template-columns: 70px 85px 85px auto; gap: 10px 0; padding-left: 14px; }
+.regions label { gap: 8px; font-size: 10px; }
+.sr-note { font-size: 10px; color: #5c5c57; margin: 12px 0 0 14px; }
+.modal-ship .pf-foot { margin-top: 34px; gap: 11px; align-items: center; }
+.modal-ship .pf-foot .pf-btn { width: 98px; height: 28px; font-size: 10px; border-radius: 4px; }
+.modal-ship .pf-foot .btn-outline { border: 1px solid rgb(0 0 0 / .3); }
+.modal-ship .sr-del { margin-right: auto; font-size: 11px; font-weight: 500; color: #912d25; }
+.modal-ship .sr-del[hidden] { display: none; }
+@media (max-width: 760px) {
+  .zone { grid-template-columns: minmax(0, 1fr); padding: 8px; }
+  .zone .zp { padding-left: 15px; }
+}
+@media (max-width: 480px) {
+  .gcheck { width: 18px; height: 18px; } .gcheck::before { width: 11px; height: 9px; }
+  .gradio { width: 16px; height: 16px; } .gradio::before { width: 8px; height: 8px; }
+  .modal-ship form { padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px)); }
+  .modal-ship .sr-field > label, .modal-ship .sr-field legend { font-size: 13px; }
+  .modal-ship .pf-input, .modal-ship select.pf-input { height: 44px; font-size: 16px; }
+  .modal-ship .pf-input::placeholder { font-size: 14px; }
+  .ptype { padding-left: 0; }
+  .ptype .pt { grid-template-columns: minmax(0, 1fr); }
+  .ptype label.r { font-size: 14px; }
+  .ptype .hint { font-size: 12px; padding-left: 26px; }
+  .ptype .amt { height: 40px; margin-left: 26px; max-width: 200px; }
+  .ptype .amt span, .ptype .amt input { font-size: 16px; }
+  .regions { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-left: 0; gap: 12px; }
+  .regions label { font-size: 14px; }
+  .sr-note { margin-left: 0; font-size: 12px; }
+  .modal-ship .pf-foot .pf-btn { height: 46px; font-size: 14px; width: auto; flex: 1; }
+  .modal-ship .sr-del { flex-basis: 100%; text-align: left; margin-bottom: 4px; }
+  .modal-ship .pf-foot { flex-wrap: wrap; }
 }
 

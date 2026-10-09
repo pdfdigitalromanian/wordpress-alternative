@@ -2126,3 +2126,483 @@ function CategoryDialog({
     </dialog>
   );
 }
+
+/* ------------------------- Checkout Settings + shipping rate dialog */
+
+/* E-Commerce / Store → Checkout Settings (#/overview/checkout) and its
+   Add / edit shipping rate dialog. Markup, copy, validation messages and
+   the seeded gateways / zones mirror renderCheckoutView() and the #dlg-ship
+   flow in digital-romanian-screen.html one-for-one. Like the other site
+   screens, the gateway + zone data lives in the route component (as props)
+   so edits survive moving between the store views; clicks are React
+   handlers instead of delegated [data-*] lookups. */
+
+export type ShippingZone = {
+  id: string;
+  name: string;
+  type: "flat" | "free" | "weight";
+  amount: number;
+  eta: string;
+  regions: string[];
+};
+
+export type Checkout = {
+  gateways: { paystack: { on: boolean; keys: string }; cod: { on: boolean } };
+  zones: ShippingZone[];
+};
+
+const BASE_REGIONS = ["Ikeja", "Surulere", "Yaba", "Agege", "Lekki", "Victoria Island"];
+const SHIP_ETAS = ["Same day", "24 – 48 Hours", "2 – 3 Days", "3 – 5 Days", "5 – 7 Days", "1 – 2 Weeks"];
+const naira = (n: number) => "₦" + Number(n).toLocaleString("en-NG", { maximumFractionDigits: 2 });
+const parseAmt = (v: string) => {
+  const n = parseFloat(String(v).replace(/[^\d.]/g, ""));
+  return Number.isNaN(n) ? NaN : n;
+};
+const isShopSite = (s: SiteLite) => s.theme === "alicia" || s.theme === "sun";
+
+/* checkoutOf(s) - the deterministic demo gateways / shipping zones. */
+export function generateCheckout(site: SiteLite): Checkout {
+  const shop = isShopSite(site);
+  return {
+    gateways: { paystack: { on: shop, keys: "" }, cod: { on: false } },
+    zones: shop
+      ? [
+          { id: site.id + "z0", name: "Lagos Mainland / Island Flat Rate", type: "flat", amount: 2500, eta: "24 – 48 Hours", regions: ["Ikeja", "Surulere", "Yaba", "Lekki", "Victoria Island"] },
+          { id: site.id + "z1", name: "Interstate Deliveries", type: "weight", amount: 0, eta: "3 – 5 Days", regions: ["All other states"] },
+        ]
+      : [],
+  };
+}
+
+export function CheckoutView({
+  site,
+  checkout,
+  setCheckout,
+  showToast,
+  showToastAction,
+}: {
+  site: SiteLite;
+  checkout: Checkout;
+  setCheckout: (updater: (c: Checkout) => Checkout) => void;
+  showToast: (text: string) => void;
+  showToastAction: (text: string, label: string, action: () => void) => void;
+}) {
+  const [ship, setShip] = useState<{ edit: ShippingZone | null } | null>(null);
+  const [keyDraft, setKeyDraft] = useState(checkout.gateways.paystack.keys);
+
+  useEffect(() => {
+    setKeyDraft(checkout.gateways.paystack.keys);
+  }, [checkout.gateways.paystack.keys]);
+
+  const g = checkout.gateways;
+
+  const toggleGateway = (k: "paystack" | "cod", checked: boolean) => {
+    if (!checked && Object.entries(g).every(([x, gg]) => x === k || !gg.on)) {
+      showToast("Keep at least one payment method on so customers can pay.");
+      return;
+    }
+    setCheckout((c) =>
+      k === "cod"
+        ? { ...c, gateways: { ...c.gateways, cod: { on: checked } } }
+        : { ...c, gateways: { ...c.gateways, paystack: { ...c.gateways.paystack, on: checked } } },
+    );
+    showToast(`${k === "cod" ? "Cash on Delivery / Bank Transfer" : "Paystack / Flutterwave"} ${checked ? "turned on" : "turned off"}`);
+  };
+
+  const saveKey = () => {
+    const v = keyDraft.trim();
+    if (!v || v === g.paystack.keys) return;
+    if (!/^pk_(test|live)_\w{6,}$/.test(v)) {
+      showToast("Paste your public key. It starts with pk_live_ or pk_test_");
+      return;
+    }
+    const masked = v.slice(0, 8) + "••••" + v.slice(-4);
+    setCheckout((c) => ({ ...c, gateways: { ...c.gateways, paystack: { on: true, keys: masked } } }));
+    showToast("Payment keys saved. Paystack / Flutterwave is active.");
+  };
+
+  const removeZone = (z: ShippingZone) => {
+    const i = checkout.zones.findIndex((x) => x.id === z.id);
+    if (i < 0) return;
+    setCheckout((c) => ({ ...c, zones: c.zones.filter((x) => x.id !== z.id) }));
+    showToastAction(`${z.name} deleted`, "Undo", () =>
+      setCheckout((c) => {
+        const back = [...c.zones];
+        back.splice(Math.min(i, back.length), 0, z);
+        return { ...c, zones: back };
+      }),
+    );
+  };
+
+  const zonePrice = (z: ShippingZone) =>
+    z.type === "flat" ? (
+      <span className="zp">{naira(z.amount)}</span>
+    ) : z.type === "free" ? (
+      <span className="zp">Free{z.amount ? ` over ${naira(z.amount)}` : ""}</span>
+    ) : (
+      <span className="zp calc">Calculated at checkout</span>
+    );
+
+  return (
+    <>
+      <div className="ov-head">
+        <h1 tabIndex={-1} className="sv-title">
+          E-Commerce / Store <span className="engine" title="Store engine connected">{I_CHECK_C}Medusa</span>
+        </h1>
+        <p>Manage your products, inventory, order lists, and payment channel toggles.</p>
+      </div>
+
+      <section className="ov-card ck-card" aria-labelledby="ck-t">
+        <header>
+          <h2 id="ck-t">Checkout &amp; Payment Settings</h2>
+          <p>Configure how your customers pay and how orders are shipped.</p>
+        </header>
+
+        <h3 className="ck-sec">Payment Gateway <small>(Powered by Medusa)</small></h3>
+        <div className="ck-box">
+          <div className="gw">
+            <div className="gw-main">
+              <input type="checkbox" className="gcheck" id="gw-paystack" checked={g.paystack.on} onChange={(e) => toggleGateway("paystack", e.target.checked)} />
+              <label htmlFor="gw-paystack">
+                <strong>Paystack / Flutterwave</strong>
+                <span className={`st${g.paystack.on ? "" : " off"}`}>({g.paystack.on ? "Active" : "Inactive"})</span>
+                <small>(Accept local cards, bank transfers, USSD, and mobile money in Nigeria)</small>
+              </label>
+            </div>
+            <div className="gw-keys">
+              <label className="sr-only" htmlFor="gw-key">Paystack public key</label>
+              <input
+                id="gw-key"
+                className={g.paystack.keys ? "saved-key" : ""}
+                placeholder="Configure Keys"
+                autoComplete="off"
+                spellCheck={false}
+                value={keyDraft}
+                title="Paste your public key (pk_live_… or pk_test_…) and press Enter"
+                onChange={(e) => setKeyDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    saveKey();
+                  }
+                }}
+                onFocus={(e) => {
+                  if (e.target.value.includes("•")) e.target.select();
+                }}
+              />
+            </div>
+          </div>
+          <div className="gw">
+            <div className="gw-main">
+              <input type="checkbox" className="gcheck" id="gw-cod" checked={g.cod.on} onChange={(e) => toggleGateway("cod", e.target.checked)} />
+              <label htmlFor="gw-cod">
+                <strong>Cash on Delivery / Bank Transfer</strong>
+                <span className="st off">(Manual verification)</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <h3 className="ck-sec">Shipping Zones &amp; Rates</h3>
+        <div className="ck-box zones">
+          <ul className="zlist">
+            {checkout.zones.map((z) => (
+              <li key={z.id}>
+                <button
+                  type="button"
+                  className="zone"
+                  title={`${z.regions.join(", ")} · ${z.eta}`}
+                  aria-label={`Edit ${z.name}`}
+                  onClick={() => setShip({ edit: z })}
+                >
+                  <span className="zn"><span>{z.name}:</span></span>
+                  {zonePrice(z)}
+                </button>
+              </li>
+            ))}
+          </ul>
+          {checkout.zones.length ? null : (
+            <div className="tab-empty" style={{ padding: "20px 8px" }}>
+              <strong>No shipping rates yet</strong>
+              Add at least one rate so customers can check out.
+            </div>
+          )}
+          <div className="zfoot">
+            <button type="button" className="btn-light" onClick={() => setShip({ edit: null })}>
+              {icon("i-plus", 14, 14, "0 0 18 18")}
+              Add Shipping
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {ship ? (
+        <ShipDialog
+          key={ship.edit?.id ?? "new"}
+          zones={checkout.zones}
+          edit={ship.edit}
+          onCancel={() => setShip(null)}
+          onDelete={(z) => {
+            setShip(null);
+            removeZone(z);
+          }}
+          onSubmit={(data, edit) => {
+            if (edit) {
+              setCheckout((c) => ({ ...c, zones: c.zones.map((z) => (z.id === edit.id ? { ...z, ...data } : z)) }));
+              setShip(null);
+              showToast(`${data.name} updated`);
+            } else {
+              setCheckout((c) => ({ ...c, zones: [...c.zones, { id: site.id + "z" + Date.now(), ...data }] }));
+              setShip(null);
+              showToast(`${data.name} added`);
+            }
+          }}
+        />
+      ) : null}
+    </>
+  );
+}
+
+/* ------------------------------------------------- add/edit shipping rate */
+
+function ShipDialog({
+  zones,
+  edit,
+  onCancel,
+  onDelete,
+  onSubmit,
+}: {
+  zones: ShippingZone[];
+  edit: ShippingZone | null;
+  onCancel: () => void;
+  onDelete: (z: ShippingZone) => void;
+  onSubmit: (data: { name: string; type: ShippingZone["type"]; amount: number; eta: string; regions: string[] }, edit: ShippingZone | null) => void;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
+  const flatRef = useRef<HTMLInputElement>(null);
+  const minRef = useRef<HTMLInputElement>(null);
+  const regionsRef = useRef<HTMLDivElement>(null);
+  const closingRef = useRef(false);
+
+  const [name, setName] = useState(edit?.name ?? "");
+  const [type, setType] = useState<ShippingZone["type"]>(edit?.type ?? "flat");
+  const [flat, setFlat] = useState(edit?.type === "flat" ? Number(edit.amount).toLocaleString("en-NG") : "2,500");
+  const [min, setMin] = useState(edit?.type === "free" && edit.amount ? Number(edit.amount).toLocaleString("en-NG") : "");
+  const [eta, setEta] = useState(edit?.eta ?? "24 – 48 Hours");
+  const [picked, setPicked] = useState<string[]>(edit?.regions ?? ["Ikeja", "Surulere"]);
+  const [errors, setErrors] = useState<{ name?: string; price?: string; region?: string }>({});
+
+  /* Region list: the first four base regions plus any of the edited zone's
+     own regions; a zone that reaches "All other states" keeps that option. */
+  const regionOpts = Array.from(
+    new Set([...BASE_REGIONS.slice(0, 4), ...(edit ? edit.regions.filter((r) => r !== "All other states") : [])]),
+  );
+  if (edit?.regions.includes("All other states")) regionOpts.push("All other states");
+
+  /* Same StrictMode-aware close guard as ProductDialog / PageDialog. */
+  useEffect(() => {
+    const d = ref.current;
+    if (!d) return;
+    if (!d.open) d.showModal();
+    nameRef.current?.focus();
+    return () => {
+      if (d.open) closingRef.current = true;
+      d.close();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleClose = () => {
+    if (closingRef.current) {
+      closingRef.current = false;
+      return;
+    }
+    onCancel();
+  };
+
+  const clearErr = (id: "name" | "price" | "region") => setErrors((e) => (e[id] ? { ...e, [id]: "" } : e));
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = name.trim();
+    const next: typeof errors = {};
+    let first: HTMLElement | null = null;
+    if (!trimmed) {
+      next.name = "Give this rate a name, e.g. Lagos Mainland Express.";
+      first = first ?? nameRef.current;
+    } else if (zones.some((z) => z.id !== edit?.id && z.name.toLowerCase() === trimmed.toLowerCase())) {
+      next.name = `You already have a rate called ${trimmed}.`;
+      first = first ?? nameRef.current;
+    }
+    let amount = 0;
+    if (type === "flat") {
+      amount = parseAmt(flat);
+      if (!(amount > 0)) {
+        next.price = "Enter the flat rate in naira, e.g. 2,500.";
+        first = first ?? flatRef.current;
+      }
+    } else if (type === "free") {
+      const v = min.trim();
+      amount = v ? parseAmt(v) : 0;
+      if (v && !(amount > 0)) {
+        next.price = "Enter a minimum order amount, or leave it empty to make shipping free on every order.";
+        first = first ?? minRef.current;
+      }
+    }
+    if (!picked.length) {
+      next.region = "Pick at least one region this rate applies to.";
+      first = first ?? (regionsRef.current?.querySelector("input") as HTMLInputElement | null);
+    }
+    setErrors(next);
+    if (first) {
+      first.focus();
+      return;
+    }
+    onSubmit({ name: trimmed, type, amount: Math.round(amount * 100) / 100, eta, regions: picked }, edit);
+  };
+
+  return (
+    <dialog
+      className="modal modal-product modal-ship"
+      ref={ref}
+      aria-labelledby="sr-title"
+      onClose={handleClose}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) ref.current?.close();
+      }}
+    >
+      <form id="sr-form" noValidate onSubmit={submit}>
+        <div className="pf-head">
+          <h2 id="sr-title">{edit ? "Edit Shipping Rate" : "Add Shipping Rate"}</h2>
+          <button type="button" className="icon-btn" aria-label="Close" onClick={() => ref.current?.close()}>
+            {icon("i-close", 18, 18, "0 0 16 16")}
+          </button>
+        </div>
+
+        <div className="sr-field pf-field">
+          <label htmlFor="sr-name">Rate Title / Zone Name:</label>
+          <input
+            ref={nameRef}
+            className="pf-input"
+            id="sr-name"
+            maxLength={60}
+            autoComplete="off"
+            placeholder="e.g. Lagos Mainland Express Delivery"
+            value={name}
+            aria-invalid={!!errors.name}
+            aria-describedby={errors.name ? "sr-name-err" : undefined}
+            onChange={(e) => {
+              clearErr("name");
+              setName(e.target.value);
+            }}
+          />
+          <p className="pf-err" id="sr-name-err" role="alert" hidden={!errors.name}>{errors.name}</p>
+        </div>
+
+        <fieldset className="sr-field">
+          <legend>Pricing Type:</legend>
+          <div className="ptype">
+            <div className="pt">
+              <label className="r">
+                <input type="radio" className="gradio" name="sr-type" value="flat" checked={type === "flat"} onChange={() => { setType("flat"); clearErr("price"); }} />
+                Flat Rate:
+              </label>
+              <span className={`amt${type !== "flat" ? " dim" : ""}`} id="sr-flat-box" aria-invalid={!!(errors.price && type === "flat")}>
+                <span aria-hidden="true">₦</span>
+                <input
+                  ref={flatRef}
+                  id="sr-flat"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  aria-label="Flat rate in naira"
+                  value={flat}
+                  disabled={type !== "flat"}
+                  onChange={(e) => {
+                    clearErr("price");
+                    setFlat(e.target.value.replace(/[^\d.,]/g, ""));
+                  }}
+                />
+              </span>
+            </div>
+            <div className="pt">
+              <label className="r">
+                <input type="radio" className="gradio" name="sr-type" value="free" checked={type === "free"} onChange={() => { setType("free"); clearErr("price"); }} />
+                Free Shipping
+              </label>
+              <span className="hint" id="sr-free-hint">(Orders above a certain amount)</span>
+            </div>
+            <div className="pt" id="sr-min-row" hidden={type !== "free"}>
+              <span className="hint" style={{ paddingLeft: 20 }}>Free on orders above</span>
+              <span className={`amt${type !== "free" ? " dim" : ""}`} id="sr-min-box" aria-invalid={!!(errors.price && type === "free")}>
+                <span aria-hidden="true">₦</span>
+                <input
+                  ref={minRef}
+                  id="sr-min"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  aria-label="Minimum order for free shipping"
+                  placeholder="20,000"
+                  value={min}
+                  disabled={type !== "free"}
+                  onChange={(e) => {
+                    clearErr("price");
+                    setMin(e.target.value.replace(/[^\d.,]/g, ""));
+                  }}
+                />
+              </span>
+            </div>
+            <div className="pt">
+              <label className="r">
+                <input type="radio" className="gradio" name="sr-type" value="weight" checked={type === "weight"} onChange={() => { setType("weight"); clearErr("price"); }} />
+                Weight-Based
+              </label>
+              <span className="hint">(Calculated via Medusa engine)</span>
+            </div>
+          </div>
+          <p className="pf-err" id="sr-price-err" role="alert" hidden={!errors.price}>{errors.price}</p>
+        </fieldset>
+
+        <div className="sr-field">
+          <label htmlFor="sr-eta">Estimated Delivery Timeframe:</label>
+          <select className="pf-input" id="sr-eta" value={eta} onChange={(e) => setEta(e.target.value)}>
+            {SHIP_ETAS.map((t) => (
+              <option key={t}>{t}</option>
+            ))}
+          </select>
+        </div>
+
+        <fieldset className="sr-field">
+          <legend>Available to Regions:</legend>
+          <div className="regions" id="sr-regions" ref={regionsRef}>
+            {regionOpts.map((r) => (
+              <label key={r}>
+                <input
+                  type="checkbox"
+                  className="gcheck"
+                  value={r}
+                  checked={picked.includes(r)}
+                  onChange={(e) => {
+                    clearErr("region");
+                    setPicked((list) => (e.target.checked ? [...list, r] : list.filter((x) => x !== r)));
+                  }}
+                />
+                {r}
+              </label>
+            ))}
+          </div>
+          <p className="sr-note">(Select districts or enter statewide rule)</p>
+          <p className="pf-err" id="sr-region-err" role="alert" hidden={!errors.region}>{errors.region}</p>
+        </fieldset>
+
+        <div className="pf-foot">
+          {edit ? (
+            <button type="button" className="btn-text sr-del" onClick={() => onDelete(edit)}>Delete rate</button>
+          ) : null}
+          <button type="button" className="btn-outline pf-btn" onClick={() => ref.current?.close()}>Cancel</button>
+          <button type="submit" className="btn-primary pf-btn" id="sr-submit">Save Rate</button>
+        </div>
+      </form>
+    </dialog>
+  );
+}

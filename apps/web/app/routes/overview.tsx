@@ -3,7 +3,9 @@ import { Link, useActionData, useLocation, useNavigate, useRouteLoaderData } fro
 import { AccountMenu } from "~/components/account-menu";
 import {
   CategoriesView,
+  CheckoutView,
   generateCategories,
+  generateCheckout,
   generateOrders,
   generatePages,
   generateProducts,
@@ -11,6 +13,7 @@ import {
   ProductsView,
   WebsitePagesView,
   type Category,
+  type Checkout,
   type Order,
   type Product,
   type WebPage,
@@ -104,7 +107,7 @@ const GEAR_13 = (
 
 /* SITE_VIEW_TITLES from render(): the per-view document titles and the
    sidebar labels the "coming soon" toast echoes. */
-const SITE_VIEW_TITLES: Record<string, string> = { overview: "Overview", pages: "Website Pages", products: "Products", orders: "Orders", categories: "Categories" };
+const SITE_VIEW_TITLES: Record<string, string> = { overview: "Overview", pages: "Website Pages", products: "Products", orders: "Orders", categories: "Categories", checkout: "Checkout Settings" };
 const NAV_LABELS: Record<string, string> = {
   cms: "Content/CMS",
   media: "Media Library",
@@ -409,6 +412,7 @@ export default function Overview() {
   const [productsBySite, setProductsBySite] = useState<Record<string, Product[]>>({});
   const [ordersBySite, setOrdersBySite] = useState<Record<string, Order[]>>({});
   const [categoriesBySite, setCategoriesBySite] = useState<Record<string, Category[]>>({});
+  const [checkoutBySite, setCheckoutBySite] = useState<Record<string, Checkout>>({});
 
   // state.currentId in the standalone file, shared with the workspace and admin screens.
   useEffect(() => {
@@ -442,6 +446,10 @@ export default function Overview() {
     () => (activeSite ? (categoriesBySite[activeSite.id] ?? generateCategories(activeSite)) : []),
     [activeSite, categoriesBySite],
   );
+  const siteCheckout: Checkout | null = useMemo(
+    () => (activeSite ? (checkoutBySite[activeSite.id] ?? generateCheckout(activeSite)) : null),
+    [activeSite, checkoutBySite],
+  );
   const setSitePages = (updater: (list: WebPage[]) => WebPage[]) => {
     if (!activeSite) return;
     const site = activeSite;
@@ -461,6 +469,11 @@ export default function Overview() {
     if (!activeSite) return;
     const site = activeSite;
     setCategoriesBySite((m) => ({ ...m, [site.id]: updater(m[site.id] ?? generateCategories(site)) }));
+  };
+  const setSiteCheckout = (updater: (c: Checkout) => Checkout) => {
+    if (!activeSite) return;
+    const site = activeSite;
+    setCheckoutBySite((m) => ({ ...m, [site.id]: updater(m[site.id] ?? generateCheckout(site)) }));
   };
 
   const sidebarRef = useRef<HTMLElement>(null);
@@ -549,7 +562,7 @@ export default function Overview() {
   // setSiteNav(true) runs on every render of the /overview route: the store
   // group opens only on the products view and collapses anywhere else, while
   // a manual toggle survives until the next view change.
-  useEffect(() => setStoreOpen(siteView === "products" || siteView === "orders" || siteView === "categories"), [siteView]);
+  useEffect(() => setStoreOpen(siteView === "products" || siteView === "orders" || siteView === "categories" || siteView === "checkout"), [siteView]);
 
   /* render(): document title, #workspace-main scrollTop reset, heading focus
      (the prototype focuses every h1, and the effect below re-runs on each
@@ -664,7 +677,7 @@ export default function Overview() {
             <li className="nav-grp">
               <button
                 type="button"
-                className={`nav-link nav-group-btn${siteView === "products" || siteView === "orders" || siteView === "categories" ? " has-current" : ""}`}
+                className={`nav-link nav-group-btn${siteView === "products" || siteView === "orders" || siteView === "categories" || siteView === "checkout" ? " has-current" : ""}`}
                 data-store-toggle
                 aria-expanded={storeOpen}
                 aria-controls="store-sub"
@@ -694,10 +707,10 @@ export default function Overview() {
                   </Link>
                 </li>
                 <li>
-                  <a href="/overview" data-site-nav="checkout" onClick={inertNav("checkout")}>
+                  <Link to="/overview/checkout" data-site-nav="checkout" aria-current={siteView === "checkout" ? "page" : undefined} onClick={() => closeMenu()}>
                     {GEAR_13}
                     Checkout Settings
-                  </a>
+                  </Link>
                 </li>
               </ul>
             </li>
@@ -801,8 +814,8 @@ export default function Overview() {
             {!dashboard || !activeSite ? (
               siteView === "pages" ? (
                 <NoSiteView title="Website Pages" sub="Manage your page tree, SEO titles, subpaths, and publishing status." hasWorkspace={!!activeWorkspace} />
-              ) : siteView === "products" || siteView === "orders" || siteView === "categories" ? (
-                <NoSiteView title="E-Commerce / Store" sub="Manage your products, inventory, order lists, and payment channel toggles." hasWorkspace={!!activeWorkspace} />
+            ) : siteView === "products" || siteView === "orders" || siteView === "categories" || siteView === "checkout" ? (
+              <NoSiteView title="E-Commerce / Store" sub="Manage your products, inventory, order lists, and payment channel toggles." hasWorkspace={!!activeWorkspace} />
               ) : (
                 <>
                   <div className="ov-head">
@@ -862,6 +875,15 @@ export default function Overview() {
                   showToast(`Showing ${c.count} ${c.count === 1 ? "product" : "products"} in ${c.name}`);
                   navigate("/overview/products");
                 }}
+              />
+            ) : siteView === "checkout" && siteCheckout ? (
+              <CheckoutView
+                key={activeSite.id}
+                site={activeSite}
+                checkout={siteCheckout}
+                setCheckout={setSiteCheckout}
+                showToast={showToast}
+                showToastAction={showToastAction}
               />
             ) : (
               <SiteOverview d={dashboard} showToast={showToast} navToast={navToast} />
