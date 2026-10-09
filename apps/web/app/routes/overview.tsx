@@ -1,26 +1,41 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, NavLink, useActionData, useLoaderData } from "react-router";
+import { Link, useActionData, useLocation, useNavigate, useRouteLoaderData } from "react-router";
 import { AccountMenu } from "~/components/account-menu";
+import {
+  CategoriesView,
+  generateCategories,
+  generateOrders,
+  generatePages,
+  generateProducts,
+  OrdersView,
+  ProductsView,
+  WebsitePagesView,
+  type Category,
+  type Order,
+  type Product,
+  type WebPage,
+} from "~/components/overview-screens";
 import { CreateWorkspaceDialog, InviteDialog, Toast } from "~/components/workspace-dialogs";
 import { useResultToast } from "~/components/workspace-shell";
 import { Wmark } from "~/components/workspace-sidebar";
 import { handleWorkspaceAction } from "~/lib/workspace-actions.server";
 import { slugify } from "~/lib/slugify";
-import { loadWorkspaceScreen } from "~/lib/workspace.server";
 import { timeAgo } from "~/lib/workspace-view";
 import "./overview.css";
 import type { Route } from "./+types/overview";
+import type { loader as workspaceDataLoader } from "./workspace-data";
 
 /* The /overview screen from digital-romanian-screen.html (section
-   data-route="/overview"). Markup, icon sizes and colours mirror the
-   prototype's static HTML + renderSiteOverview() one-for-one; overview.css
-   carries every rule the prototype applies to this screen, including the
-   [data-route="/overview"] Figma pixel-match block. The demo WORKSPACES /
-   SITES arrays are replaced by the signed-in user's real rows. */
-
-export async function loader({ request }: Route.LoaderArgs) {
-  return loadWorkspaceScreen(request);
-}
+   data-route="/overview", nested). One route component serves the three
+   views the standalone file paints there — Overview, Website Pages
+   (#/overview/pages) and E-Commerce / Store → Products
+   (#/overview/products) — picked from the pathname. Markup, icon sizes and
+   colours mirror the prototype's static HTML + renderSiteOverview() /
+   renderPagesView() / renderProductsView() one-for-one; overview.css carries
+   every rule the prototype applies to this section, including the
+   [data-route="/overview"] Figma pixel-match block and the site-screen
+   block. The demo WORKSPACES / SITES arrays are replaced by the signed-in
+   user's real rows. */
 
 export async function action({ request }: Route.ActionArgs) {
   return handleWorkspaceAction(request, await request.formData());
@@ -46,50 +61,59 @@ const OVERVIEW_ICON = (
     <path d="M2.75 7.4 9 2.5l6.25 4.9v7.35a.75.75 0 0 1-.75.75h-3.25v-4.75h-4.5v4.75H3.5a.75.75 0 0 1-.75-.75z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
   </svg>
 );
-const PAGES_ICON = (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-    <path d="M4 1.75h5.5L13 5.25v9H4z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-    <path d="M9.25 1.75v3.75H13M6.5 8.5h4M6.5 11h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-  </svg>
-);
 const CMS_ICON = (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
     <rect x="2.25" y="2.25" width="11.5" height="11.5" rx="1.5" stroke="currentColor" strokeWidth="1.4" />
     <path d="M5 5.5h6M5 8h6M5 10.5h3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
   </svg>
 );
+/* The sidebar's media row draws #i-media at 21x16; the .ic-media rule in
+   overview.css shrinks it to 18x14, exactly as in the prototype. */
 const MEDIA_ICON = (
-  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-    <rect x="1.5" y="3.5" width="10" height="10.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
-    <path d="m2.5 12.5 3-3 2 2 1.25-1.25 2.75 2.75" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-    <circle cx="5" cy="6.75" r="1" fill="currentColor" />
-    <rect x="13.75" y="3.5" width="3" height="4.25" rx=".6" stroke="currentColor" strokeWidth="1.4" />
-    <rect x="13.75" y="9.75" width="3" height="4.25" rx=".6" stroke="currentColor" strokeWidth="1.4" />
+  <svg className="ic-media" width="21" height="16" viewBox="0 0 21 16" fill="none" aria-hidden="true">
+    <use href="#i-media" />
+  </svg>
+);
+/* The four store sub-item glyphs (prototype sidebar, #store-sub). */
+const CART_13 = (
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path d="M1.5 2h2l1.6 8h7.4l1.5-5.5H4.3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    <circle cx="6.2" cy="13" r="1" fill="currentColor" />
+    <circle cx="11.8" cy="13" r="1" fill="currentColor" />
+  </svg>
+);
+const BAG_13 = (
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path d="M3 5h10l-.8 9H3.8z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+    <path d="M5.75 5V4a2.25 2.25 0 0 1 4.5 0v1" stroke="currentColor" strokeWidth="1.4" />
+  </svg>
+);
+const CATS_13 = (
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <rect x="5.5" y="1.75" width="5" height="4" rx="1" stroke="currentColor" strokeWidth="1.4" />
+    <rect x="1.75" y="10.25" width="5" height="4" rx="1" stroke="currentColor" strokeWidth="1.4" />
+    <rect x="9.25" y="10.25" width="5" height="4" rx="1" stroke="currentColor" strokeWidth="1.4" />
+    <path d="M8 5.75V8M4.25 10.25V8h7.5v2.25" stroke="currentColor" strokeWidth="1.4" />
+  </svg>
+);
+const GEAR_13 = (
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <use href="#i-settings" />
   </svg>
 );
 
-/* The flat site sidebar, in order. */
-const SITE_NAV = [
-  { key: "overview", label: "Overview" },
-  { key: "pages", label: "Website Pages" },
-  { key: "store", label: "E-Commerce / Store" },
-  { key: "cms", label: "Content/CMS" },
-  { key: "media", label: "Media Library" },
-  { key: "permissions", label: "Site Permissions" },
-  { key: "settings", label: "Site Settings" },
-];
-
-function siteNavIcon(key: string) {
-  switch (key) {
-    case "overview": return OVERVIEW_ICON;
-    case "pages": return PAGES_ICON;
-    case "store": return icon("i-store");
-    case "cms": return CMS_ICON;
-    case "media": return MEDIA_ICON;
-    case "permissions": return icon("i-team");
-    default: return icon("i-settings");
-  }
-}
+/* SITE_VIEW_TITLES from render(): the per-view document titles and the
+   sidebar labels the "coming soon" toast echoes. */
+const SITE_VIEW_TITLES: Record<string, string> = { overview: "Overview", pages: "Website Pages", products: "Products", orders: "Orders", categories: "Categories" };
+const NAV_LABELS: Record<string, string> = {
+  cms: "Content/CMS",
+  media: "Media Library",
+  permissions: "Site Permissions",
+  settings: "Site Settings",
+  orders: "Order",
+  categories: "Categories",
+  checkout: "Checkout Settings",
+};
 
 const THEME_BG: Record<string, string> = { alicia: "#1f3d2b", nova: "#2f5da8", axis: "#111", sun: "#e0892d", plain: "#b5b2a8" };
 
@@ -356,9 +380,19 @@ function siteData(s: { id: string; name: string; status: string; theme: string; 
 }
 
 export default function Overview() {
-  const data = useLoaderData<typeof loader>();
+  /* The workspaces + sites rows come from the shared pathless layout
+     (routes/workspace-data.tsx), so clicking a site card or a sidebar row is a
+     client-side transition with no second read of the same data. */
+  const data = useRouteLoaderData<typeof workspaceDataLoader>("routes/workspace-data")!;
   const actionResult = useActionData<typeof action>();
   const { toast, setToast } = useResultToast(actionResult, null);
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
+
+  // SITE_VIEW_TITLES lookup from render(): path.split('/')[2] decides the
+  // view, anything unknown falls back to the overview.
+  const viewSeg = pathname.replace(/\/+$/, "").split("/")[2] ?? "";
+  const siteView = SITE_VIEW_TITLES[viewSeg] ? viewSeg : "overview";
 
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(data.workspaces[0]?.id ?? null);
   const [activeSiteId, setActiveSiteId] = useState<string | null>(null);
@@ -367,6 +401,14 @@ export default function Overview() {
   const [footQuery, setFootQuery] = useState("");
   const [createWsOpen, setCreateWsOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [storeOpen, setStoreOpen] = useState(false);
+  const [screenToast, setScreenToast] = useState<{ text: string; label?: string; action?: () => void } | null>(null);
+  // Row data per site: generated on first visit, then kept in state so edits
+  // survive moving between the three site views.
+  const [pagesBySite, setPagesBySite] = useState<Record<string, WebPage[]>>({});
+  const [productsBySite, setProductsBySite] = useState<Record<string, Product[]>>({});
+  const [ordersBySite, setOrdersBySite] = useState<Record<string, Order[]>>({});
+  const [categoriesBySite, setCategoriesBySite] = useState<Record<string, Category[]>>({});
 
   // state.currentId in the standalone file, shared with the workspace and admin screens.
   useEffect(() => {
@@ -384,7 +426,45 @@ export default function Overview() {
   const activeSite = SITES.find((s) => s.id === activeSiteId);
   const dashboard = useMemo(() => (activeSite ? siteData(activeSite) : null), [activeSite]);
 
+  const sitePages: WebPage[] = useMemo(
+    () => (activeSite ? (pagesBySite[activeSite.id] ?? generatePages(activeSite)) : []),
+    [activeSite, pagesBySite],
+  );
+  const siteProducts: Product[] = useMemo(
+    () => (activeSite ? (productsBySite[activeSite.id] ?? generateProducts(activeSite)) : []),
+    [activeSite, productsBySite],
+  );
+  const siteOrders: Order[] = useMemo(
+    () => (activeSite ? (ordersBySite[activeSite.id] ?? generateOrders(activeSite)) : []),
+    [activeSite, ordersBySite],
+  );
+  const siteCategories: Category[] = useMemo(
+    () => (activeSite ? (categoriesBySite[activeSite.id] ?? generateCategories(activeSite)) : []),
+    [activeSite, categoriesBySite],
+  );
+  const setSitePages = (updater: (list: WebPage[]) => WebPage[]) => {
+    if (!activeSite) return;
+    const site = activeSite;
+    setPagesBySite((m) => ({ ...m, [site.id]: updater(m[site.id] ?? generatePages(site)) }));
+  };
+  const setSiteProducts = (updater: (list: Product[]) => Product[]) => {
+    if (!activeSite) return;
+    const site = activeSite;
+    setProductsBySite((m) => ({ ...m, [site.id]: updater(m[site.id] ?? generateProducts(site)) }));
+  };
+  const setSiteOrders = (updater: (list: Order[]) => Order[]) => {
+    if (!activeSite) return;
+    const site = activeSite;
+    setOrdersBySite((m) => ({ ...m, [site.id]: updater(m[site.id] ?? generateOrders(site)) }));
+  };
+  const setSiteCategories = (updater: (list: Category[]) => Category[]) => {
+    if (!activeSite) return;
+    const site = activeSite;
+    setCategoriesBySite((m) => ({ ...m, [site.id]: updater(m[site.id] ?? generateCategories(site)) }));
+  };
+
   const sidebarRef = useRef<HTMLElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
   const footBtnRef = useRef<HTMLButtonElement>(null);
   const footMenuRef = useRef<HTMLDivElement>(null);
   const menuOpenRef = useRef<HTMLButtonElement>(null);
@@ -466,8 +546,54 @@ export default function Overview() {
     return () => window.removeEventListener("resize", fitSidebar);
   }, [fitSidebar]);
 
-  const showToast = (text: string) => setToast({ text });
-  const navToast = (key: string) => showToast(`${SITE_NAV.find((i) => i.key === key)?.label ?? "This section"} is coming soon`);
+  // setSiteNav(true) runs on every render of the /overview route: the store
+  // group opens only on the products view and collapses anywhere else, while
+  // a manual toggle survives until the next view change.
+  useEffect(() => setStoreOpen(siteView === "products" || siteView === "orders" || siteView === "categories"), [siteView]);
+
+  /* render(): document title, #workspace-main scrollTop reset, heading focus
+     (the prototype focuses every h1, and the effect below re-runs on each
+     view change the way its hashchange render() did). */
+  useEffect(() => {
+    document.title = `${SITE_VIEW_TITLES[siteView]} · Digital Romanian`;
+    const main = mainRef.current;
+    if (main) main.scrollTop = 0;
+    main?.querySelector("h1")?.focus({ preventScroll: true });
+  }, [siteView]);
+
+  // The store group re-fits the sidebar when it toggles (the prototype binds
+  // fitSidebar() to every .nav-group-btn and calls it on each route render).
+  useEffect(() => {
+    fitSidebar();
+  }, [fitSidebar, storeOpen, siteView]);
+
+  // The toast() slot: 5.2s, same as the standalone file. Server action
+  // results keep using useResultToast's state; this one carries the screen
+  // actions (Undo, Edit page) the shared toast can't express.
+  useEffect(() => {
+    if (!screenToast) return;
+    const t = window.setTimeout(() => setScreenToast(null), 5200);
+    return () => window.clearTimeout(t);
+  }, [screenToast]);
+
+  const showToast = (text: string) => {
+    setToast(null);
+    setScreenToast({ text });
+  };
+  const showToastAction = (text: string, label: string, action: () => void) => {
+    setToast(null);
+    setScreenToast({ text, label, action });
+  };
+  const navToast = (key: string) => showToast(`${NAV_LABELS[key] ?? "This section"} is coming soon`);
+  // Inert sidebar rows: preventDefault + "<label> is coming soon".
+  const inertNav = (key: string) => (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    closeMenu();
+    navToast(key);
+  };
+
+  const shown = toast ?? screenToast;
+  const shownIsScreen = !!screenToast && shown === screenToast;
 
   return (
     <div className="app" data-route="/overview">
@@ -504,7 +630,7 @@ export default function Overview() {
 
         <div className="tb-right">
           <button className="icon-btn" aria-label="Notifications">{icon("i-bell", 20, 20, "0 0 20 20")}</button>
-          <AccountMenu name={data.userName} email={data.email} size={22} />
+          <AccountMenu name={data.userName} email={data.email} />
         </div>
       </header>
 
@@ -521,29 +647,84 @@ export default function Overview() {
           </div>
 
           <ul className="nav nav-flat">
-            {SITE_NAV.map((item) =>
-              item.key === "overview" ? (
-                <li key={item.key}>
-                  <NavLink to="/overview" end className="nav-link" data-site-nav="overview" aria-current="page" onClick={() => closeMenu()}>
-                    {siteNavIcon(item.key)}
-                    {item.label}
-                  </NavLink>
+            <li>
+              <Link className="nav-link" to="/overview" data-site-nav="overview" aria-current={siteView === "overview" ? "page" : undefined} onClick={() => closeMenu()}>
+                {OVERVIEW_ICON}
+                Overview
+              </Link>
+            </li>
+            <li>
+              <Link className="nav-link" to="/overview/pages" data-site-nav="pages" aria-current={siteView === "pages" ? "page" : undefined} onClick={() => closeMenu()}>
+                <svg className="ic-doc" width="14" height="18" viewBox="0 0 14 18" fill="none" aria-hidden="true">
+                  <use href="#i-doc" />
+                </svg>
+                Website Pages
+              </Link>
+            </li>
+            <li className="nav-grp">
+              <button
+                type="button"
+                className={`nav-link nav-group-btn${siteView === "products" || siteView === "orders" || siteView === "categories" ? " has-current" : ""}`}
+                data-store-toggle
+                aria-expanded={storeOpen}
+                aria-controls="store-sub"
+                onClick={() => setStoreOpen((o) => !o)}
+              >
+                {icon("i-store")}
+                E-Commerce / Store
+                {icon("i-chevron-down", 14, 14, "0 0 16 16", "chev")}
+              </button>
+              <ul className="store-sub" id="store-sub" hidden={!storeOpen}>
+                <li>
+                  <Link to="/overview/products" data-site-nav="products" aria-current={siteView === "products" ? "page" : undefined} onClick={() => closeMenu()}>
+                    {CART_13}
+                    Products
+                  </Link>
                 </li>
-              ) : (
-                <li key={item.key}>
-                  {/* Inert in the prototype: preventDefault + "<name> is coming soon". */}
-                  <a
-                    className="nav-link"
-                    href="/overview"
-                    data-site-nav={item.key}
-                    onClick={(e) => { e.preventDefault(); closeMenu(); navToast(item.key); }}
-                  >
-                    {siteNavIcon(item.key)}
-                    {item.label}
+                <li>
+                  <Link to="/overview/orders" data-site-nav="orders" aria-current={siteView === "orders" ? "page" : undefined} onClick={() => closeMenu()}>
+                    {BAG_13}
+                    Order
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/overview/categories" data-site-nav="categories" aria-current={siteView === "categories" ? "page" : undefined} onClick={() => closeMenu()}>
+                    {CATS_13}
+                    Categories
+                  </Link>
+                </li>
+                <li>
+                  <a href="/overview" data-site-nav="checkout" onClick={inertNav("checkout")}>
+                    {GEAR_13}
+                    Checkout Settings
                   </a>
                 </li>
-              ),
-            )}
+              </ul>
+            </li>
+            <li>
+              <a className="nav-link" href="/overview" data-site-nav="cms" onClick={inertNav("cms")}>
+                {CMS_ICON}
+                Content/CMS
+              </a>
+            </li>
+            <li>
+              <a className="nav-link" href="/overview" data-site-nav="media" onClick={inertNav("media")}>
+                {MEDIA_ICON}
+                Media Library
+              </a>
+            </li>
+            <li>
+              <a className="nav-link" href="/overview" data-site-nav="permissions" onClick={inertNav("permissions")}>
+                {icon("i-team")}
+                Site Permissions
+              </a>
+            </li>
+            <li>
+              <a className="nav-link" href="/overview" data-site-nav="settings" onClick={inertNav("settings")}>
+                {icon("i-settings")}
+                Site Settings
+              </a>
+            </li>
           </ul>
 
           <div className="wsd-foot ov-foot">
@@ -615,27 +796,73 @@ export default function Overview() {
           </div>
         </nav>
 
-        <main className="main" id="workspace-main">
+        <main className="main" id="workspace-main" ref={mainRef}>
           <div className="ov" id="ov-view">
-            {!dashboard ? (
-              <>
-                <div className="ov-head">
-                  <h1 tabIndex={-1}>Overview</h1>
-                  <p>Your site cockpit — get a quick view of your site health, key stats and recent activity.</p>
-                </div>
-                <div className="ov-card ov-empty">
-                  <h2>{activeWorkspace ? "No sites in this workspace yet" : "You’re not in a workspace yet"}</h2>
-                  <p>
-                    {activeWorkspace
-                      ? "Create your first site and its health, stats and recent activity will show up here."
-                      : "Create a workspace to start building sites."}
-                  </p>
-                  <Link className="btn-dark" to="/workspace">
-                    {icon("i-plus", 18)}
-                    {activeWorkspace ? "Create new site" : "Go to workspaces"}
-                  </Link>
-                </div>
-              </>
+            {!dashboard || !activeSite ? (
+              siteView === "pages" ? (
+                <NoSiteView title="Website Pages" sub="Manage your page tree, SEO titles, subpaths, and publishing status." hasWorkspace={!!activeWorkspace} />
+              ) : siteView === "products" || siteView === "orders" || siteView === "categories" ? (
+                <NoSiteView title="E-Commerce / Store" sub="Manage your products, inventory, order lists, and payment channel toggles." hasWorkspace={!!activeWorkspace} />
+              ) : (
+                <>
+                  <div className="ov-head">
+                    <h1 tabIndex={-1}>Overview</h1>
+                    <p>Your site cockpit — get a quick view of your site health, key stats and recent activity.</p>
+                  </div>
+                  <div className="ov-card ov-empty">
+                    <h2>{activeWorkspace ? "No sites in this workspace yet" : "You’re not in a workspace yet"}</h2>
+                    <p>
+                      {activeWorkspace
+                        ? "Create your first site and its health, stats and recent activity will show up here."
+                        : "Create a workspace to start building sites."}
+                    </p>
+                    <Link className="btn-dark" to="/workspace">
+                      {icon("i-plus", 18)}
+                      {activeWorkspace ? "Create new site" : "Go to workspaces"}
+                    </Link>
+                  </div>
+                </>
+              )
+            ) : siteView === "pages" ? (
+              <WebsitePagesView
+                key={activeSite.id}
+                site={activeSite}
+                d={dashboard}
+                pages={sitePages}
+                setPages={setSitePages}
+                showToast={showToast}
+                showToastAction={showToastAction}
+              />
+            ) : siteView === "products" ? (
+              <ProductsView
+                key={activeSite.id}
+                site={activeSite}
+                products={siteProducts}
+                setProducts={setSiteProducts}
+                showToast={showToast}
+                showToastAction={showToastAction}
+              />
+            ) : siteView === "orders" ? (
+              <OrdersView
+                key={activeSite.id}
+                site={activeSite}
+                orders={siteOrders}
+                setOrders={setSiteOrders}
+                showToast={showToast}
+              />
+            ) : siteView === "categories" ? (
+              <CategoriesView
+                key={activeSite.id}
+                site={activeSite}
+                categories={siteCategories}
+                setCategories={setSiteCategories}
+                showToast={showToast}
+                showToastAction={showToastAction}
+                onViewProducts={(c) => {
+                  showToast(`Showing ${c.count} ${c.count === 1 ? "product" : "products"} in ${c.name}`);
+                  navigate("/overview/products");
+                }}
+              />
             ) : (
               <SiteOverview d={dashboard} showToast={showToast} navToast={navToast} />
             )}
@@ -653,15 +880,50 @@ export default function Overview() {
         knownPeople={data.directory}
         actionResult={actionResult}
       />
-      {toast ? (
+      {shown ? (
         <Toast
-          text={toast.text}
-          {...(toast.label
-            ? { link: { label: toast.label, onClick: () => { setToast(null); if (toast.href) window.location.assign(toast.href); } } }
+          text={shown.text}
+          {...(shown.label
+            ? {
+                link: {
+                  label: shown.label,
+                  onClick: () => {
+                    if (shownIsScreen && screenToast) {
+                      const act = screenToast.action;
+                      setScreenToast(null);
+                      act?.();
+                    } else {
+                      setToast(null);
+                      if (toast?.href) window.location.assign(toast.href);
+                    }
+                  },
+                },
+              }
             : {})}
         />
       ) : null}
     </div>
+  );
+}
+
+/* noSiteView(): the empty shell the two site screens paint when the active
+   workspace has no site (or no workspace at all). */
+function NoSiteView({ title, sub, hasWorkspace }: { title: string; sub: string; hasWorkspace: boolean }) {
+  return (
+    <>
+      <div className="ov-head">
+        <h1 tabIndex={-1}>{title}</h1>
+        <p>{sub}</p>
+      </div>
+      <div className="ov-card ov-empty">
+        <h2>{hasWorkspace ? "No sites in this workspace yet" : "You’re not in a workspace yet"}</h2>
+        <p>{hasWorkspace ? "Create a site first, then come back here to manage it." : "Create a workspace to start building sites."}</p>
+        <Link className="btn-dark" to="/workspace">
+          {icon("i-plus", 18)}
+          {hasWorkspace ? "Create new site" : "Go to workspaces"}
+        </Link>
+      </div>
+    </>
   );
 }
 
@@ -755,13 +1017,13 @@ function SiteOverview({
           <span className="qi">{I_DOC_18}</span>
           <small>Total Pages</small>
           <strong>{st.pages}</strong>
-          <a href="/overview" data-ov-nav="pages" onClick={nav("pages")}>View all</a>
+          <Link to="/overview/pages" data-ov-nav="pages">View all</Link>
         </div>
         <div className="ov-card qstat">
           <span className="qi">{I_CART}</span>
           <small>Products</small>
           <strong>{st.products}</strong>
-          <a href="/overview" data-ov-nav="store" onClick={nav("store")}>{st.products ? "View Store" : "Set up store"}</a>
+          <Link to="/overview/products" data-ov-nav="store">{st.products ? "View Store" : "Set up store"}</Link>
         </div>
         <div className="ov-card qstat">
           <span className="qi">{I_POST}</span>
@@ -781,7 +1043,7 @@ function SiteOverview({
         <section className="ov-card ov-pages" aria-labelledby="ovp-t">
           <header>
             <h2 id="ovp-t">Recently Edited Pages</h2>
-            <a className="link-sm" href="/overview" data-ov-nav="pages" onClick={nav("pages")}>View details {CHEV_R}</a>
+            <Link className="link-sm" to="/overview/pages" data-ov-nav="pages">View details {CHEV_R}</Link>
           </header>
           <div className="ptable" role="table" aria-label="Recently edited pages">
             <div className="prow head" role="row">

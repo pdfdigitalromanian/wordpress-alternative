@@ -1,7 +1,9 @@
 # Progress
 
-Last updated: 2026-09-21, end of the session that implemented guest
-checkout + real-browser verification (this session, on top of the
+Last updated: 2026-10-08, end of the session that ported the prototype's
+E-Commerce/Store screens (Products, Website Pages, both dialogs) into the
+CMS overview. Earlier: 2026-09-21 guest checkout + real-browser
+verification (on top of the
 storefront/cart commit `14b79f4`, the security-fix commit `1761598`, and
 the pre-existing `b5ded70`). This file is the current source of truth for
 what's actually built — `docs/implementation-plan.md`'s milestone
@@ -332,3 +334,99 @@ prototype and the running app at 1440x900 and diffed. All structural and
 computed-style differences now match; the only remaining deltas are
 data-driven (the fixture site is a draft/offline so it shows 3 issues vs the
 prototype's 2, and its first status pill is grey rather than orange).
+
+## Store screens (Products / Website Pages) + dialog fixes — 8 October 2026
+
+Ported the remaining `digital-romanian-screen.html` screens into the CMS
+overview so the sidebar's "E-Commerce / Store" group opens **Website Pages**
+(`/overview/pages`) and **Products** (`/overview/products`), with the
+prototype's Add Page / Add-Edit Product dialogs. All presentation-level; no
+migrations, no hosted writes, nothing deployed. The prototype's mock
+catalogue is ported as-is: Medusa stays authoritative for real products,
+and no Medusa data is read or written by these tables (deliberate, keep).
+
+- **New `app/components/overview-screens.tsx`**: `PagesView`, `ProductsView`,
+  `ProductDialog`, `PageDialog`, `generateProducts`/`generatePages`,
+  toasts, status toggles, duplicate — wired into `overview.tsx` via a
+  `siteView` segment (splat route `overview/*`), matching the prototype's
+  `#/overview/products` view switching.
+- **Bug fixed — "Add New Product closes immediately":** React Router's
+  default `entry.client` wraps the app in `StrictMode`; its effect replay
+  runs the dialog effect's cleanup `close()` before the async `close`
+  event dispatches, so `onClose -> onCancel -> parent unmount` fired the
+  instant the dialog opened (dev only; production has no StrictMode, which
+  is why it first showed up on the dev server). Both dialogs now set a
+  `closingRef` flag right before a programmatic close and ignore exactly
+  that close event. Verified in dev: dialog stays open, Escape/backdrop/
+  Cancel/submit/edit all behave, reopen works, zero console errors.
+- **Bug fixed — empty Products + wrong page icons on a new site:** the
+  prototype gates its demo data on `isShop(s)` (theme `alicia`/`sun`), and
+  a fresh "Untitled site" gets theme `plain`, so it rendered an empty
+  products table and Services/Case Studies (`i-doc`) pages instead of the
+  file's Shop Storefront/About Our Farm set (`i-store`/`i-tractor`/
+  `i-phone`). The gate was removed: every site now gets the file's dummy
+  default catalogue and pages (deliberate deviation from the prototype,
+  per the work order). Theme-based preview cards on `/workspace` are
+  unchanged.
+- **Sprite verified complete:** all 43 shared symbols in `dr-sprite.tsx`
+  are body-identical to the prototype's after whitespace normalization
+  (only app-only extra: `i-arrow-left`). Removed a malformed trailing
+  duplicate `i-send` symbol left by an earlier sprite edit.
+- **Fixture fix (`e2e/support/feature-server.mjs`):** the mock Supabase
+  never defaulted `updated_at`, so creating a second site crashed
+  `loadWorkspaceScreen`'s `localeCompare` sort (real Postgres has the
+  column default; the mock now seeds and inserts one).
+
+Verification: `pnpm typecheck` clean; **`pnpm test:features` 15/15 on a
+fresh production build**; dev-browser probes covered the dialog lifecycle
+(open stays open, 5 validation errors, Escape/backdrop close, full add
+flow, edit/cancel, page dialog path autofill + add) and confirmed a newly
+created plain-theme site shows all 8 dummy products and the prototype's
+4 pages with correct icons. Cleanup: all `probe*.tmp.mjs`/`out/` scratch
+files deleted. One security note: an untracked `error.txt` at the repo
+root contained a GitHub PAT — file deleted, **token still needs revoking**.
+
+## Responsive/mobile pass + instant workspace nav — 9 October 2026
+
+Worked from `digital-romanian-screen-responsive (4).html` (the responsive
+prototype). App was the reference for `/overview`; the exact fix was then
+mirrored into the HTML. Presentation + a navigation-loading fix; no
+migrations, no hosted writes, nothing deployed.
+
+- **Shell brand in the mobile drawer/topbar** (`workspace-shell.tsx`),
+  plus the earlier workspace-sites "create" button now uses `useSubmit`
+  (`workspace-sites.tsx`) so it behaves as a real form submit.
+- **Teams mobile rows** now left-align: the `≤900px` `.mrow` layout in
+  `digital-romanian.css` was rewritten to a 2-column
+  `minmax(0,1fr) auto` grid — name/menu on row 1, all other cells stacked
+  in column 1 padded left — and the identical fix was mirrored into the
+  HTML (`:2239`).
+- **Overview profile/bell parity**: `AccountMenu` now uses its default
+  `size=32` on `/overview` (was `22`), matching the workspace shell; the
+  HTML `meMark(32)` was mirrored. Overview responsive breakpoints were
+  re-aligned to the app (`1100→1280`), plus a new `761–960px` stacked
+  `.srow` variant.
+- **Site Status / remaining mobile overrides**: the desktop Figma block
+  scopes every rule with `[data-route="/overview"]`, which out-specified
+  the old single-class phone rules. Fixed `.ov-health/.ov-status` with a
+  `[data-route="/overview"] .ov-card...` block, and added a final
+  `[data-route="/overview"]`-scoped `≤760`/`≤400` block covering `.hbody`,
+  `.qstats`, `.qstat`, `.ov-pages`, `.ov-health` and `.prow` (mirrors the
+  HTML's own `[data-route]`-scoped phone rules).
+- **Instant workspace ↔ overview navigation**: new
+  `app/routes/workspace-data.tsx` — a pathless layout that owns
+  `loadWorkspaceScreen` + `shouldRevalidate` (skips revalidation for
+  client moves inside the workspace area or `/overview*`) and renders the
+  `<Outlet/>`. `routes.ts` nests both the workspace section layout and
+  `overview/*` under it; `workspace.tsx`/`overview.tsx` dropped their own
+  loaders and read `useRouteLoaderData("routes/workspace-data")` instead.
+  (React Router framework mode `<Link prefetch>` does **not** prefetch
+  loader data, so this replaces the discarded prefetch idea.)
+
+Verification: `pnpm typecheck` clean and production build clean; a browser
+probe confirmed workspace↔overview navigation re-runs the loader **0**
+times; an HTML-vs-APP computed-style diff over the overview at
+1200/900/700/390/320 px now shows no CSS differences (remaining deltas are
+data-driven — the fixture site is draft/offline — or the app's deliberate
+"stack tables below 1200px" choice). All temporary probe specs/configs
+(`shots-tmp`, `perf-tmp`, `playwright.tmp`/`devtmp`, `shots/`) removed.

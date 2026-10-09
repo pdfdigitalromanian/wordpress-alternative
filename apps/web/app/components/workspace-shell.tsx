@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { Outlet } from "react-router";
-import { SidebarToggle, WorkspaceSidebar, type SidebarNavItem } from "~/components/workspace-sidebar";
+import { Link, Outlet } from "react-router";
+import { SidebarToggle, Wmark, WorkspaceSidebar, type SidebarNavItem } from "~/components/workspace-sidebar";
 import { AccountMenu } from "~/components/account-menu";
 import { CreateWorkspaceDialog, InviteDialog } from "~/components/workspace-dialogs";
 import type { WorkspaceActionResult } from "~/lib/workspace-actions.server";
@@ -108,6 +108,10 @@ export function WorkspaceShell({
         <div className="wsd-body">
           <header className="wsd-top">
             <SidebarToggle open={sideOpen} onClick={() => setSideOpen((o) => !o)} />
+            <Link className="wsd-top-brand" to="/workspace">
+              <Wmark workspace={current} size={26} />
+              <span className="ws-switch-name">{current ? current.name : "Digital Romanian"}</span>
+            </Link>
             <span className="spacer" />
             {topRight ?? (
               <>

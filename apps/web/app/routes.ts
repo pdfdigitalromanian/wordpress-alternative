@@ -29,17 +29,28 @@ export default [
   // sidebar rows are the same four the file declares (All sites, Templates,
   // Team, General settings). "template" and "teams" are registered as aliases
   // of the same leaf so either spelling resolves without a redirect hop.
-  layout("routes/workspace.tsx", [
-    route("workspace", "routes/workspace-sites.tsx"),
-    route("templates", "routes/templates.tsx"),
-    route("template", "routes/templates.tsx", { id: "template-alias" }),
-    route("team", "routes/team.tsx"),
-    route("teams", "routes/team.tsx", { id: "teams-alias" }),
-    route("settings", "routes/settings.tsx"),
+  // One pathless layout loads the workspace rows for BOTH the section tree
+  // below and the site Overview screen (which draws its own shell but reads the
+  // same rows), so moving between them is a client-side transition with no
+  // second read. See routes/workspace-data.tsx.
+  layout("routes/workspace-data.tsx", [
+    layout("routes/workspace.tsx", [
+      route("workspace", "routes/workspace-sites.tsx"),
+      route("templates", "routes/templates.tsx"),
+      route("template", "routes/templates.tsx", { id: "template-alias" }),
+      route("team", "routes/team.tsx"),
+      route("teams", "routes/team.tsx", { id: "teams-alias" }),
+      route("settings", "routes/settings.tsx"),
+    ]),
+    // The site overview screen (sidebar + per-site navigation), same screen the
+    // standalone file shows at #/overview, #/overview/pages and
+    // #/overview/products. One splat registration instead of three sibling
+    // routes on purpose: siblings unmount and remount the module on every
+    // click, which would drop the workspace/site selection, the drawer and the
+    // toasts (the same reason the workspace area uses a pathless layout). The
+    // view is picked from the pathname inside the component.
+    route("overview/*", "routes/overview.tsx"),
   ]),
-  // The site overview screen (sidebar + per-site navigation), same screen the
-  // standalone file shows at #/overview.
-  route("overview", "routes/overview.tsx"),
   route("admin", "routes/admin/layout.tsx", [
     index("routes/admin/index.tsx"),
     route("sites/:siteId", "routes/admin/site.tsx"),

@@ -35,7 +35,7 @@ function reset() {
       { id: "membership-admin", workspace_id: workspaceId, user_id: colleagues[0].id, role: "administrator", created_at: "2026-01-01T00:00:00.000Z" },
       { id: "membership-editor", workspace_id: workspaceId, user_id: colleagues[1].id, role: "editor", created_at: "2026-01-01T00:00:00.000Z" },
     ],
-    sites: [{ id: siteId, name: "Feature test site", slug: "feature-test", workspace_id: workspaceId, active_release_id: null }],
+    sites: [{ id: siteId, name: "Feature test site", slug: "feature-test", workspace_id: workspaceId, active_release_id: null, updated_at: "2026-01-01T00:00:00.000Z" }],
     pages: [{ id: "home-page", site_id: siteId, title: "Home", slug: "", draft_document: blank(), draft_updated_at: "2026-01-01T00:00:00.000Z", created_at: "2026-01-01T00:00:00.000Z" }],
     releases: [], release_pages: [], site_domains: [{ site_id: siteId, hostname: "localhost", verified_at: "2026-01-01", is_primary: true }],
     public_site_by_hostname: [{ hostname: "localhost", site_id: siteId }],
@@ -98,7 +98,7 @@ const server = createServer(async (req, res) => {
     }
     if (req.method === "POST") {
       if (name === "pages" && tables.pages.some(page => page.site_id === body.site_id && page.slug === body.slug)) return json({ code: "23505", message: "duplicate path" }, 409);
-      const row = { id: randomUUID(), created_at: new Date().toISOString(), draft_updated_at: new Date().toISOString(), ...body }; tables[name].push(row); rows = [row];
+      const row = { id: randomUUID(), created_at: new Date().toISOString(), draft_updated_at: new Date().toISOString(), updated_at: new Date().toISOString(), ...body }; tables[name].push(row); rows = [row];
     }
     if (req.method === "PATCH") { if (name === "pages" && saveFailure) return json({ message: "Simulated save failure" }, 503); rows.forEach(row => Object.assign(row, body)); }
     if (req.method === "DELETE") { tables[name] = tables[name].filter(row => !rows.includes(row)); }

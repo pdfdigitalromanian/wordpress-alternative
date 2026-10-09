@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { useActionData, useLoaderData, useLocation } from "react-router";
+import { useActionData, useLocation, useRouteLoaderData } from "react-router";
 import { Toast } from "~/components/workspace-dialogs";
 import { WorkspaceShell, useResultToast } from "~/components/workspace-shell";
 import { handleWorkspaceAction } from "~/lib/workspace-actions.server";
-import { loadWorkspaceScreen } from "~/lib/workspace.server";
 import type { Route } from "./+types/workspace";
+import type { loader as workspaceDataLoader } from "./workspace-data";
 
 /* Ported from digital-romanian-screens.html ->
      <section data-route="/workspace" data-nested>
@@ -26,36 +26,14 @@ export const VIEWS = [
   { key: "settings", to: "/settings", label: "Settings", ico: "i-settings" },
 ] as const;
 
-export async function loader({ request }: Route.LoaderArgs) {
-  return loadWorkspaceScreen(request);
-}
-
 export async function action({ request }: Route.ActionArgs) {
   return handleWorkspaceAction(request, await request.formData());
 }
 
-/** Keep the shell (and its switcher, dialogs and open/closed drawer) alive
- *  across navigation between the four sections. The standalone file keeps
- *  everything in one `state` object for the same reason. Revalidation is still
- *  forced after a POST, so the grid and the activity feed update immediately
- *  after creating a site, publishing or inviting. */
-const SECTION_PATHS = new Set(["/workspace", "/templates", "/team", "/teams", "/settings"]);
-
-export function shouldRevalidate({ formMethod, nextUrl, currentUrl }: { formMethod?: string; nextUrl: URL; currentUrl: URL }) {
-  // A submission has to refresh the grid and the activity feed.
-  if (formMethod) return true;
-  /* Moving between the four sections reads exactly the same rows -- the
-     workspaces, sites and feed belong to the layout, not to the tab. The
-     previous version only skipped revalidation when the path was *identical*,
-     so every tab click fell through to the default (true) and re-ran the whole
-     workspace loader, service-role user list included. That is the lag on
-     Team / Templates / Settings. */
-  if (SECTION_PATHS.has(currentUrl.pathname) && SECTION_PATHS.has(nextUrl.pathname)) return false;
-  return true;
-}
-
 export default function WorkspaceLayout() {
-  const data = useLoaderData<typeof loader>();
+  /* Loaded once by the pathless routes/workspace-data.tsx layout, which also
+     owns the shouldRevalidate that keeps tab clicks from re-reading it. */
+  const data = useRouteLoaderData<typeof workspaceDataLoader>("routes/workspace-data")!;
   const actionResult = useActionData<typeof action>();
   const location = useLocation();
   const { currentId, switchTo } = useWorkspaceSelection(data);

@@ -1,7 +1,9 @@
 /* ---- Site overview (/overview) — copied from digital-romanian-screen.html so the
    React screen renders identically to the prototype. Self-contained: tokens, base
    reset, app shell + switcher, shared marks/menus/toast, then the overview rules
-   (the [data-route="/overview"] block is the Figma pixel-match and must stay last). ---- */
+   (the [data-route="/overview"] block is the Figma pixel-match), then — in the
+   same order the prototype keeps them — the Website Pages / Products screens and
+   the add-page + add/edit-product dialogs. ---- */
 
 /* ---------- Tokens ---------- */
 :root {
@@ -382,6 +384,7 @@
   width: 240px;
   flex-shrink: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   scrollbar-width: none;
   background: #fff;
   box-shadow: 0 16px 10px 3px rgb(0 0 0 / .1);
@@ -1767,7 +1770,7 @@ button.prow:hover {
 }
 
 
-@media (max-width: 1100px) {
+@media (max-width: 1280px) {
 
   .ov-top,
   .ov-bottom {
@@ -1917,6 +1920,182 @@ button.prow:hover {
     grid-column: 3;
     grid-row: 1 / span 2;
   }
+}
+
+
+@media (max-width: 760px) {
+
+  /* The desktop Figma block below sets padding/min-height on
+     [data-route="/overview"] .ov-health/.ov-status, which out-specifies the
+     single-class mobile rules here. Match that specificity so the mobile
+     padding and the positive min-height actually apply. */
+  [data-route="/overview"] .ov-card.ov-health,
+  [data-route="/overview"] .ov-card.ov-status {
+    min-height: 0;
+    padding: 16px;
+  }
+
+  [data-route="/overview"] .ov-card.ov-status>header {
+    padding-left: 0;
+  }
+}
+
+
+/* =====================================================================
+   Site overview below 400px (down to ~300px). The desktop two-column
+   arrangements get too cramped here: the health ring stays beside its
+   copy, status rows keep labels on the left and values/actions on the
+   right, and quick-stat, issue and page rows stack so nothing overlaps.
+   The standalone prototype stops refining at 360px; this improves on it.
+   ===================================================================== */
+@media (max-width: 400px) {
+
+  [data-route="/overview"] .ov-card.ov-status {
+    min-height: 0;
+    padding: 16px 14px 18px;
+  }
+
+  /* Card headers can carry a chip/count — let them wrap, and let the title
+     shrink instead of pushing the count past the card edge. */
+  .ov-card>header {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+
+  .ov-card>header>h2 {
+    min-width: 0;
+  }
+
+  /* Site Health: wrap the ring above its copy, and center the ring so the
+     card still reads as balanced once the headline drops below it. */
+  .hbody {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+  }
+
+  .ring {
+    width: 80px;
+    height: 80px;
+    align-self: center;
+  }
+
+  .ring .val strong {
+    font-size: 22px;
+  }
+
+  .ring .val small {
+    font-size: 12px;
+  }
+
+  .hbody p {
+    max-width: none;
+  }
+
+  .hbody .mini {
+    gap: 4px 12px;
+  }
+
+  /* Site Status rows: label on the left, value + action on the right. */
+  .srow {
+    grid-template-columns: 18px auto minmax(0, 1fr);
+    grid-auto-rows: min-content;
+    column-gap: 10px;
+    row-gap: 3px;
+    padding: 12px;
+  }
+
+  .srow > svg:first-child {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    align-self: center;
+  }
+
+  .srow .k {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: center;
+  }
+
+  .srow .v {
+    grid-column: 3;
+    grid-row: 1;
+    text-align: right;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+  }
+
+  .srow > :last-child {
+    grid-column: 3;
+    grid-row: 2;
+    justify-self: end;
+    text-align: right;
+  }
+
+  /* Quick stats: one card per row, with the link pinned to the right. */
+  .qstats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .qstat a {
+    justify-self: end;
+    text-align: right;
+  }
+
+  /* Issues header wraps its count under the title instead of overflowing. */
+  .ov-issues h2 {
+    flex-wrap: wrap;
+  }
+
+  /* Recently edited pages: name on line 1, path + modified on line 2,
+     status + chevron on line 3. */
+  .prow {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 4px 10px;
+    padding: 10px 6px;
+  }
+
+  .prow .pn {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+
+  .prow code {
+    grid-column: 1;
+    grid-row: 2;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .prow .lm {
+    grid-column: 2;
+    grid-row: 2;
+    text-align: right;
+    white-space: normal;
+  }
+
+  .prow .st {
+    grid-column: 1;
+    grid-row: 3;
+    justify-self: start;
+  }
+
+  .prow svg {
+    grid-column: 2;
+    grid-row: 3;
+    justify-self: end;
+  }
+}
+
+/* ≤ 360px: the smallest phones — stack the mini stats. */
+@media (max-width: 360px) {
+  .hbody .mini { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .ov-head h1 { font-size: 23px; }
 }
 
 
@@ -2471,7 +2650,7 @@ button.prow:hover {
   }
 
   [data-route="/overview"] .srow {
-    grid-template-columns: 17px 134px 164px minmax(0, 1fr);
+    grid-template-columns: 17px minmax(0, 134px) minmax(0, 1fr) auto;
     gap: 14px;
     min-height: 53px;
     padding: 0 12px 0 9px;
@@ -2513,7 +2692,50 @@ button.prow:hover {
   }
 }
 
-@media (min-width: 1101px) {
+/* Between 761px and 960px the sidebar still holds a 240px column, so the
+   Site Status card is too narrow for the fixed four-column grid above and
+   the action/chevron spills past the card edge. Restack the rows like the
+   mobile layout until there is room. Three class-level selectors so this
+   beats the two equal-specificity desktop rules regardless of bundling. */
+@media (min-width: 761px) and (max-width: 960px) {
+  [data-route="/overview"] .srows .srow {
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 2px 12px;
+    min-height: 0;
+    padding: 10px 12px;
+  }
+
+  [data-route="/overview"] .srows .srow>svg:first-child {
+    grid-row: 1 / span 2;
+  }
+
+  [data-route="/overview"] .srows .srow .k {
+    grid-column: 2;
+    grid-row: 1;
+    font-size: 11.5px;
+    color: var(--muted);
+  }
+
+  [data-route="/overview"] .srows .srow .v {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  [data-route="/overview"] .srows .srow> :last-child {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+    justify-self: end;
+  }
+
+  [data-route="/overview"] .srows button.srow .a {
+    width: auto;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+}
+
+@media (min-width: 1281px) {
   [data-route="/overview"] .ov-bottom {
     grid-template-columns: 724px minmax(0, 1fr);
   }
@@ -2531,3 +2753,723 @@ button.prow:hover {
     animation: none;
   }
 }
+
+/* =====================================================================
+   Site screens inside the overview shell: Website Pages, E-Commerce / Store
+   → Products and the Add Product dialog. Matched to the Figma frames
+   "Site Dashboard - Website Pages" and "Site Dashboard - E Commerce".
+   ===================================================================== */
+/* Sidebar: E-Commerce / Store dropdown */
+.nav-grp .nav-group-btn { white-space: nowrap; }
+.nav-grp .nav-group-btn .chev { width: 14px !important; height: 14px !important; margin-left: auto; }
+.nav-grp .nav-group-btn.has-current { background: #f5f5f5; }
+.store-sub { display: grid; gap: calc(2px * var(--k, 1)); margin: 0; padding: calc(4px * var(--k, 1)) 0 calc(2px * var(--k, 1)) 22px; }
+.store-sub[hidden] { display: none; }
+.store-sub a { display: flex; align-items: center; gap: 8px; min-height: max(26px, calc(30px * var(--k, 1))); padding: 0 10px; border-radius: 6px; font-size: 13px; font-weight: 500; color: #8c8c83; text-decoration: none; }
+.store-sub a svg { width: 13px; height: 13px; flex-shrink: 0; }
+.store-sub a:hover { color: var(--ink); background: #fafafa; }
+.store-sub a[aria-current="page"] { color: #0f8a4f; }
+
+/* Shared header bits */
+.sv-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px 24px; flex-wrap: wrap; }
+.sv-title { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; }
+.engine { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 500; letter-spacing: 0; color: #0f9d58; }
+.engine svg { flex-shrink: 0; }
+.sv-search { position: relative; display: flex; align-items: stretch; height: 34px; width: 296px; border: 1px solid rgb(0 0 0 / .15); border-radius: 4px; background: #fff; }
+.sv-search:focus-within { border-color: var(--ink); }
+.sv-search > svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); pointer-events: none; }
+.sv-search input { flex: 1; min-width: 0; height: 100%; border: 0; outline: none; background: transparent; padding: 0 10px 0 30px; font-size: 11.5px; color: var(--ink); }
+.sv-search input::placeholder { color: #9a9a92; }
+.sv-filter { position: relative; width: 36px; flex-shrink: 0; display: grid; place-items: center; border-left: 1px solid rgb(0 0 0 / .15); border-radius: 0 3px 3px 0; color: var(--ink); }
+.sv-filter:hover, .sv-filter[aria-expanded="true"] { background: var(--hover); }
+.sv-filter .fdot { position: absolute; top: 6px; right: 6px; width: 6px; height: 6px; border-radius: 50%; background: #1a62d6; }
+.sv-filter .fdot[hidden] { display: none; }
+.fmenu { top: calc(100% + 6px); bottom: auto; right: 0; z-index: 30; min-width: 180px; }
+.fmenu button { display: flex !important; align-items: center; justify-content: space-between; gap: 10px; }
+.fmenu button svg { visibility: hidden; }
+.fmenu button[aria-checked="true"] svg { visibility: visible; }
+.sv-add { height: 34px; padding: 0 14px; gap: 6px; font-size: 12px; border: 0; }
+.edit-btn { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 12px; border: 1px solid rgb(0 0 0 / .15); border-radius: 6px; background: #fff; font-size: 11.5px; font-weight: 500; color: var(--ink); white-space: nowrap; }
+.edit-btn:hover { background: #f6f5ef; border-color: rgb(0 0 0 / .3); }
+.c-act { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-right: 0 !important; }
+.menu-anchor { position: relative; display: inline-flex; }
+.row-menu { top: calc(100% + 4px); bottom: auto; right: 0; min-width: 184px; z-index: 25; }
+.row-menu.up { top: auto; bottom: calc(100% + 4px); }
+.tab-empty { padding: 40px 16px; text-align: center; font-size: 13.5px; color: var(--muted); }
+.tab-empty strong { display: block; font-size: 15px; font-weight: 600; color: var(--ink); margin-bottom: 6px; }
+.tab-empty .btn-dark, .tab-empty .btn-text { margin-top: 14px; }
+
+/* Products */
+.pcard { margin-top: 18px; border-color: rgb(0 0 0 / .2) !important; }
+.pcard-head { display: flex; align-items: center; justify-content: space-between; gap: 14px 20px; flex-wrap: wrap; padding: 16px 16px 14px 16px; }
+.ov .pcard-head h2 { font-size: 19px; font-weight: 500; }
+.pcard-head p { font-size: 11.5px; line-height: 1.4; color: #191919; margin-top: 4px; }
+.pcard-tools { display: flex; align-items: center; gap: 22px; }
+.ptab-row { position: relative; display: grid; grid-template-columns: minmax(0, 300fr) minmax(0, 150fr) minmax(0, 118fr) minmax(0, 140fr) minmax(0, 186fr) minmax(0, 182fr); align-items: center; min-height: 72px; padding: 0 16px; font-size: 12px; color: #000; }
+.ptab-row > * { min-width: 0; padding-right: 12px; }
+.ptab-row.head { min-height: 52px; background: #f5f5f5; font-weight: 500; }
+#prod-rows .ptab-row + .ptab-row { border-top: 1px solid rgb(0 0 0 / .08); }
+#prod-rows .ptab-row:hover { background: #fcfcfa; }
+#prod-rows { border-radius: 0 0 12px 12px; }
+.pcell { display: flex; align-items: center; gap: 8px; }
+.pthumb { width: 44px; height: 44px; flex-shrink: 0; border-radius: 6px; overflow: hidden; display: grid; place-items: center; font-size: 24px; line-height: 1; background: var(--tb, #f3ede1); }
+.pthumb img { width: 100%; height: 100%; object-fit: cover; }
+.ptxt { min-width: 0; }
+.ptxt strong { display: block; font-size: 12px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ptxt small { display: block; font-size: 11px; color: #191919; margin-top: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ptxt .pmeta { display: none; color: var(--muted); }
+.spill2 { display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 6px; font-size: 12px; font-weight: 500; white-space: nowrap; background: #e6efec; color: #2b7a5d; }
+.spill2.out { background: #fdeceb; color: #d92d20; }
+.spill2.draft { background: #ececec; color: #6b6b6b; }
+.sv-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 14px; font-size: 11.5px; color: #3d3d39; }
+.pager { display: flex; align-items: center; gap: 6px; }
+.pager button, .pager span { min-width: 24px; height: 24px; display: grid; place-items: center; border-radius: 4px; font-size: 11.5px; color: var(--ink); }
+.pager button:hover:not(:disabled) { background: #f1efe8; }
+.pager button[aria-current="page"] { background: #e3f2e9; color: #0f8a4f; font-weight: 600; }
+.pager button:disabled { opacity: .3; }
+
+/* Website Pages */
+.wp-tools { display: flex; align-items: center; gap: 16px; padding-top: 6px; }
+.wp-tools .sv-search { width: 252px; height: 32px; }
+.wp-card { margin-top: 18px; padding: 16px 18px 30px; }
+.wtab { border: 1px solid rgb(0 0 0 / .08); border-radius: 8px; }
+.wrow { position: relative; display: grid; grid-template-columns: minmax(0, 250fr) minmax(0, 170fr) minmax(0, 240fr) minmax(0, 150fr) minmax(0, 175fr); align-items: center; min-height: 82px; padding: 12px 8px; font-size: 13px; color: #000; }
+.wrow > * { min-width: 0; padding-right: 12px; }
+.wrow.head { min-height: 46px; padding: 0 8px; background: #f5f5f5; border-radius: 8px 8px 0 0; font-weight: 500; }
+#wp-rows .wrow + .wrow { border-top: 1px solid rgb(0 0 0 / .08); }
+#wp-rows .wrow:hover { background: #fcfcfa; }
+.wname { display: flex; align-items: flex-start; gap: 9px; }
+.wic { width: 22px; height: 22px; flex-shrink: 0; border-radius: 5px; background: #e6ece8; color: #3d4a43; display: grid; place-items: center; margin-top: -2px; }
+.wname strong { display: block; font-size: 13px; font-weight: 500; }
+.wkids { margin-top: 5px; font-size: 10.5px; line-height: 1.45; color: #3d3d39; }
+.wname .wmeta { display: none; font-size: 12px; color: var(--muted); margin-top: 3px; }
+.wst { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 500; color: #0f9d58; white-space: nowrap; }
+.wst::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.wst.draft { color: #9a9a92; }
+.wrow .edit-btn { height: 30px; padding: 0 14px; gap: 7px; font-size: 12.5px; }
+
+@media (max-width: 1100px) {
+  .pcard-tools { flex: 1; justify-content: flex-end; }
+}
+@media (max-width: 960px) {
+  .pcard-tools { width: 100%; gap: 12px; }
+  .pcard-tools .sv-search { flex: 1; width: auto; }
+}
+@media (max-width: 760px) {
+  .ptab-row.head, .wrow.head { display: none; }
+  .ptab-row, .wrow { grid-template-columns: minmax(0, 1fr) auto; gap: 10px 12px; min-height: 0; padding: 14px; }
+  .ptab-row > *, .wrow > * { padding-right: 0; }
+  .c-sku, .c-price, .c-stock, .w-path, .w-tpl { display: none; }
+  .ptxt .pmeta, .wname .wmeta { display: block; }
+  .c-status, .w-status { grid-column: 2; grid-row: 1; align-self: start; }
+  .c-act { grid-column: 1 / -1; justify-content: flex-end; gap: 12px; }
+  .wp-tools { width: 100%; padding-top: 0; flex-wrap: wrap; gap: 10px; }
+  .wp-tools .sv-search { flex: 1 1 200px; width: auto; }
+  .wp-card { padding: 10px; }
+  .sv-search input { font-size: 16px; }
+  .pcard-tools { flex-wrap: wrap; }
+  .pcard-tools .sv-add { flex: 1; justify-content: center; }
+}
+
+/* Add / edit product and Add page dialogs */
+.modal-product { width: min(567px, calc(100vw - 24px)); border-radius: 8px; }
+.modal-product form { padding: 18px 26px 22px; overflow-y: auto; }
+.pf-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.pf-head h2 { font-size: 17px; font-weight: 500; line-height: 1.25; color: #000; }
+.pf-head p { font-size: 11px; color: #191919; margin-top: 2px; }
+.pf-head .icon-btn { margin: -6px -10px 0 0; }
+.pf-drop { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; height: 180px; margin-top: 18px; padding: 10px; border-radius: 12px; text-align: center; cursor: pointer; color: var(--ink); background: #fff; transition: background-color .15s ease; }
+.pf-drop:hover, .pf-drop.drag { background-color: #fafaf6; }
+
+.pf-drop input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.pf-drop:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
+.pf-drop strong { font-size: 11.5px; font-weight: 600; margin-top: 6px; }
+.pf-drop small { font-size: 9.5px; line-height: 1.4; color: #3d3d39; }
+.pf-drop.has-img { padding: 8px; }
+.pf-drop.has-img img { max-height: 100%; max-width: 100%; object-fit: contain; border-radius: 8px; }
+.pf-imgbar { display: flex; justify-content: center; gap: 18px; margin-top: 8px; }
+.pf-imgbar[hidden] { display: none; }
+.pf-imgbar .btn-text { font-size: 12px; }
+.pf-fields { display: grid; gap: 10px; margin-top: 16px; }
+.pf-field label { display: block; font-size: 11px; font-weight: 500; color: #000; margin-bottom: 5px; }
+.pf-field .req { margin-left: 1px; }
+.pf-input, .pf-box { width: 100%; height: 32px; border: 1px solid rgb(0 0 0 / .2); border-radius: 4px; background: #fff; font: inherit; font-size: 12px; color: var(--ink); padding: 0 10px; transition: border-color .15s ease; }
+.pf-input:hover, .pf-box:hover { border-color: rgb(0 0 0 / .35); }
+.pf-input:focus, .pf-box:focus-within { border-color: var(--ink); }
+.pf-input::placeholder, .pf-box input::placeholder { color: #9a9a92; font-size: 11px; }
+select.pf-input { appearance: none; -webkit-appearance: none; padding-right: 30px; cursor: pointer;
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M6 3.5 10.5 8 6 12.5' stroke='%23000' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 10px center; }
+select.pf-input:invalid { color: #191919; }
+.pf-box { display: flex; align-items: stretch; padding: 0; }
+.pf-box > span { width: 26px; flex-shrink: 0; display: grid; place-items: center; border-right: 1px solid rgb(0 0 0 / .2); font-size: 11px; color: var(--ink); }
+.pf-box input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; padding: 0 10px; font-size: 12px; color: var(--ink); }
+textarea.pf-input { height: 56px; padding: 8px 10px; resize: vertical; line-height: 1.45; }
+.pf-count { text-align: right; font-size: 9.5px; color: #696963; margin-top: 4px; }
+.pf-err { font-size: 11px; line-height: 1.4; color: #912d25; margin-top: 4px; }
+.pf-err[hidden] { display: none; }
+.pf-input[aria-invalid="true"], .pf-box[aria-invalid="true"] { border-color: #b42318; }
+.pf-foot { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+.pf-foot .pf-btn { width: 150px; height: 34px; font-size: 12px; border-radius: 4px; }
+@media (max-width: 480px) {
+  .modal-product form { padding: 16px 18px 20px; }
+  .pf-foot .pf-btn { flex: 1; width: auto; height: 42px; font-size: 14px; }
+  .pf-input, .pf-box input { font-size: 16px; }
+}
+
+.pf-dash { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.pf-dash rect { width: calc(100% - 1px); height: calc(100% - 1px); fill: none; stroke: rgb(0 0 0 / .6); stroke-width: 1; stroke-dasharray: 10 10; }
+.pf-drop.drag .pf-dash rect { stroke: var(--ink); stroke-dasharray: none; }
+
+/* Design icons keep their own proportions in the sidebar */
+[data-route="/overview"] .nav.nav-flat .nav-link svg.ic-doc { width: 14px; height: 18px; margin: 0 2px; }
+[data-route="/overview"] .nav.nav-flat .nav-link svg.ic-media { width: 18px; height: 14px; }
+.pf-drop > span > svg:first-child, #pf-drop-body > svg { color: #000; }
+.wrow { min-height: 68px; }
+.wname { align-items: center; }
+.wic { margin-top: 0; }
+
+/* Search placement from the Figma frames: the search starts on the card's centre
+   line and the button ends on its right edge (Products card header + Website Pages head) */
+.pcard-head, .sv-head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; column-gap: 0; }
+.sv-head { align-items: start; }
+.pcard-tools, .wp-tools { display: flex; align-items: center; justify-content: flex-end; gap: 26px; padding-top: 0; }
+.pcard-tools { padding-left: 8px; }
+.wp-tools { padding: 4px 0 0 6px; }
+.pcard-tools .sv-search, .wp-tools .sv-search { flex: 1; width: auto; height: 40px; }
+.pcard-tools .sv-search input, .wp-tools .sv-search input { font-size: 12px; }
+.sv-filter { width: 42px; }
+.pcard-tools .sv-add, .wp-tools .sv-add { flex: 0 0 150px; height: 40px; justify-content: center; }
+/* The header is a two-column grid (title/description | search + button) with no
+   gap, but the tools need roughly half the card. Below 1280px that half is too
+   narrow, so the search slid over the description. Stack it until there is
+   room, and stop either child from overflowing its column. */
+.pcard-head > *,
+.sv-head > * {
+  min-width: 0;
+}
+
+@media (max-width: 1280px) {
+
+  .pcard-head,
+  .sv-head {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 14px;
+  }
+
+  .pcard-tools,
+  .wp-tools {
+    width: 100%;
+    padding: 0;
+    flex-wrap: wrap;
+  }
+
+  .pcard-tools .sv-search,
+  .wp-tools .sv-search {
+    flex: 1 1 220px;
+    width: auto;
+  }
+}
+@media (max-width: 760px) {
+  .pcard-tools, .wp-tools { flex-wrap: wrap; gap: 10px; }
+  .pcard-tools .sv-search, .wp-tools .sv-search { flex: 1 1 100%; }
+  .pcard-tools .sv-add, .wp-tools .sv-add { flex: 1 1 100%; }
+}
+.ov-card > header.pcard-head { display: grid; }
+
+.pthumb { background: #eeece6; }
+
+/* Add / edit product: two-column form (Figma "Add Product") */
+.pf-fields.pf-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 12px; margin-top: 18px; }
+.pf-grid .pf-field.full { grid-column: 1 / -1; }
+.pf-grid textarea.pf-input { height: 68px; }
+.c-price s { margin-left: 6px; font-size: 10.5px; color: #8c8c83; }
+@media (max-width: 480px) { .pf-fields.pf-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* =====================================================================
+   E-Commerce / Store -> Orders (Figma "Site Dashboard - E Commerce - Order")
+   ===================================================================== */
+.ocard-tools { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+.ofilter { position: relative; }
+.ofilter-btn { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px 0 12px; border: 1px solid rgb(0 0 0 / .15); border-radius: 4px; background: #fff; font-size: 11.5px; color: #3d3d39; white-space: nowrap; }
+.ofilter-btn b { font-weight: 500; color: var(--ink); }
+.ofilter-btn:hover, .ofilter-btn[aria-expanded="true"] { border-color: rgb(0 0 0 / .35); }
+.btn-export { height: 34px; padding: 0 18px; font-size: 12px; border: 0; }
+.otab-row { display: grid; grid-template-columns: minmax(0, 117fr) minmax(0, 178fr) minmax(0, 86fr) minmax(0, 109fr) minmax(0, 148fr) minmax(max-content, 122fr) minmax(0, 76fr); align-items: center; min-height: 85px; padding: 0 20px; font-size: 12px; color: #000; }
+.otab-row > * { min-width: 0; padding-right: 12px; }
+.otab-row.head { min-height: 38px; background: #f5f5f5; font-size: 11.5px; font-weight: 600; }
+#ord-rows .otab-row + .otab-row { border-top: 1px solid rgb(0 0 0 / .08); }
+#ord-rows .otab-row:nth-child(even) { background: #fafaf8; }
+#ord-rows { border-radius: 0 0 12px 12px; }
+.o-cust { display: flex; align-items: center; gap: 8px; }
+.o-cust .ptxt strong { font-size: 11.5px; font-weight: 600; }
+.oav { width: 26px; height: 26px; flex-shrink: 0; border-radius: 50%; display: grid; place-items: center; background: var(--ink); color: #fff; font-size: 9.5px; font-weight: 700; letter-spacing: .02em; }
+.oav.lg { width: 38px; height: 38px; font-size: 13px; }
+.pay { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 500; color: var(--c); }
+.pay::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.pay.paid { --c: #1fae5b; } .pay.failed { --c: #d92d20; } .pay.pending { --c: #ef8d03; }
+.fpill { display: inline-flex; align-items: center; height: 26px; padding: 0 14px; border-radius: 6px; font-size: 11px; font-weight: 500; white-space: nowrap; }
+.fpill.processing, .fpill.pending { background: #fdf0dc; color: #ef8d03; }
+.fpill.delivered { background: #e3f4ea; color: #1f8a3b; }
+.fpill.cancelled { background: #fde4e1; color: #d92d20; }
+.fpill.out { background: #ececec; color: #6b6b6b; }
+.o-view { font-size: 12px; font-weight: 500; color: #3587d7; }
+.o-view:hover { text-decoration: underline; text-underline-offset: 3px; }
+.otab-row .pmeta { display: none; color: var(--muted); }
+@media (max-width: 960px) { .ocard-tools { padding: 0; } }
+@media (max-width: 760px) {
+  .otab-row.head { display: none; }
+  .otab-row { grid-template-columns: minmax(0, 1fr) auto; gap: 10px 12px; min-height: 0; padding: 14px; }
+  .otab-row > * { padding-right: 0; }
+  .o-id, .o-items, .o-total, .o-pay { display: none; }
+  .otab-row .pmeta { display: block; }
+  .o-ful { grid-column: 2; grid-row: 1; align-self: start; }
+  .o-act { grid-column: 1 / -1; text-align: right; }
+  .ocard-tools { flex-wrap: wrap; }
+  .ocard-tools .ofilter { flex: 1; } .ofilter-btn { width: 100%; justify-content: space-between; }
+}
+
+/* Order details dialog (Figma "Order Details", 565 wide) */
+.modal-order { width: min(565px, calc(100vw - 24px)); border-radius: 12px; border: 1px solid rgb(0 0 0 / .1); }
+.modal-order form { padding: 18px 26px 26px; overflow-y: auto; }
+.od-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 14px; border-bottom: 1px solid rgb(0 0 0 / .1); }
+.od-head h2 { font-size: 17px; font-weight: 600; color: #000; }
+.od-head .icon-btn { margin-right: -8px; }
+.od-sec { padding: 16px 0; border-bottom: 1px solid rgb(0 0 0 / .1); }
+.od-sec h3 { font-size: 13px; font-weight: 600; color: #000; margin-bottom: 12px; }
+.od-cust { display: flex; align-items: center; gap: 10px; }
+.od-cust strong { display: block; font-size: 13px; font-weight: 500; color: #000; }
+.od-cust small { display: block; font-size: 10.5px; color: #191919; margin-top: 2px; }
+.od-lines { display: grid; gap: 8px; margin-top: 14px; padding-left: 14px; }
+.od-lines li { display: flex; align-items: center; gap: 12px; font-size: 10.5px; color: #000; }
+.od-lines svg { flex-shrink: 0; color: #3d3d39; }
+.od-items { display: grid; gap: 8px; }
+.od-items li { display: flex; align-items: center; gap: 8px; min-height: 48px; }
+.od-items .pthumb { width: 38px; height: 38px; border-radius: 4px; }
+.od-items .ptxt { flex: 1; }
+.od-items .ptxt strong { font-size: 11px; font-weight: 600; }
+.od-items .ptxt small { font-size: 9px; margin-top: 3px; }
+.od-pr { text-align: right; flex-shrink: 0; }
+.od-pr strong { display: block; font-size: 11px; font-weight: 600; color: #000; }
+.od-pr small { display: block; font-size: 8.5px; color: #3d3d39; margin-top: 3px; }
+.od-sum { display: grid; gap: 8px; }
+.od-sum p { display: flex; justify-content: space-between; font-size: 10px; color: #191919; }
+.od-total { display: flex; justify-content: space-between; align-items: center; padding: 16px 0 0; font-size: 11.5px; color: #000; }
+.od-total strong { font-size: 12px; font-weight: 700; }
+.od-status { display: flex; justify-content: flex-end; margin-top: 30px; }
+.od-status > span { display: inline-flex; align-items: stretch; border: 1px solid rgb(0 0 0 / .12); border-radius: 2px; font-size: 11px; overflow: hidden; }
+.od-status b { display: grid; place-items: center; padding: 0 8px; background: #f2f2f2; font-weight: 600; color: #000; }
+.od-status i { font-style: normal; display: grid; place-items: center; min-width: 72px; height: 24px; padding: 0 10px; font-weight: 500; color: var(--c, #ef8d03); }
+.od-status i.delivered { --c: #1f8a3b; } .od-status i.cancelled { --c: #d92d20; } .od-status i.out { --c: #6b6b6b; }
+.od-foot { display: flex; justify-content: flex-end; gap: 20px; margin-top: 22px; }
+.od-foot .od-btn { width: 160px; height: 32px; font-size: 12px; border-radius: 4px; gap: 8px; }
+.od-upd { position: relative; }
+.more-menu.od-menu { top: auto; bottom: calc(100% + 6px); right: 0; min-width: 200px; }
+@media (max-width: 480px) {
+  .modal-order form { padding: 16px 18px 20px; }
+  .od-foot { gap: 10px; } .od-foot > *, .od-foot .od-btn { flex: 1; width: 100%; }
+  .od-foot .od-btn { height: 42px; font-size: 14px; }
+}
+
+/* =====================================================================
+   Data tables stack earlier than the generic 760px breakpoint. The shell
+   keeps a 240px sidebar until 960px, so the table's available width is far
+   narrower than the viewport — below ~1200px the many columns collide
+   (e.g. the "Out for Delivery" pill overprinting the View action). Stack
+   them into the mobile card layout as soon as space runs out.
+   ===================================================================== */
+@media (max-width: 1200px) {
+  .prow,
+  [data-route="/overview"] .prow {
+    grid-template-columns: minmax(0, 1fr) auto 16px;
+    gap: 4px 10px;
+    min-height: 0;
+    padding: 10px 6px;
+  }
+
+  .prow.head {
+    display: none;
+  }
+
+  .prow .pn {
+    grid-column: 1;
+  }
+
+  .prow code {
+    grid-column: 1;
+    grid-row: 2;
+    font-size: 12px;
+  }
+
+  .prow .lm {
+    grid-column: 2;
+    grid-row: 2;
+    font-size: 11.5px;
+    text-align: right;
+  }
+
+  .prow .st {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+  }
+
+  .prow svg {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+  }
+
+  .ptab-row.head,
+  .wrow.head,
+  .otab-row.head {
+    display: none;
+  }
+
+  .ptab-row,
+  .wrow,
+  .otab-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px 12px;
+    min-height: 0;
+    padding: 14px;
+  }
+
+  .ptab-row > *,
+  .wrow > *,
+  .otab-row > * {
+    padding-right: 0;
+  }
+
+  .c-sku,
+  .c-price,
+  .c-stock,
+  .w-path,
+  .w-tpl,
+  .o-id,
+  .o-items,
+  .o-total,
+  .o-pay {
+    display: none;
+  }
+
+  .ptxt .pmeta,
+  .wname .wmeta,
+  .otab-row .pmeta {
+    display: block;
+  }
+
+  .c-status,
+  .w-status,
+  .o-ful {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: start;
+    justify-self: end;
+  }
+
+  .c-act,
+  .o-act {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+    gap: 12px;
+    text-align: right;
+  }
+}
+
+/* Constant gap between columns (instead of flexing text touching): the
+   fixed 12px gutter holds at every width, so cells never visually join. */
+.ptab-row,
+.wrow,
+.otab-row {
+  column-gap: 12px;
+}
+
+.ptab-row > *,
+.wrow > *,
+.otab-row > * {
+  padding-right: 0;
+}
+
+/* =====================================================================
+   Bulletproof cells: a column gap only separates the grid tracks — a child
+   wider than its track could still bleed across the gutter. Force long text
+   to truncate/wrap inside its own cell so nothing can ever cross a gap.
+   Action cells (.c-act/.o-act) are excluded: they host popover menus that
+   must not be clipped.
+   ===================================================================== */
+.prow > *,
+.ptab-row > *,
+.wrow > *,
+.otab-row > * {
+  min-width: 0;
+}
+
+.ptab-row > *:not(.c-act),
+.wrow > *:not(.c-act),
+.otab-row > *:not(.o-act),
+.prow > * {
+  overflow: hidden;
+}
+
+.o-id,
+.o-items,
+.o-total,
+.o-pay,
+.c-sku,
+.c-price,
+.c-stock,
+.w-path,
+.w-tpl {
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.o-cust > *,
+.pcell > .ptxt,
+.wname > * {
+  min-width: 0;
+}
+
+.wname strong,
+.wname .wmeta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wname .wkids {
+  overflow-wrap: anywhere;
+}
+
+.pay,
+.fpill,
+.spill,
+.spill2 {
+  max-width: 100%;
+}
+
+/* =====================================================================
+   E-Commerce / Store -> Categories (Figma "Site Dashboard > E Commerce >
+   Category"). Table frame 1107px, rows 92px; columns Category Name 260 ·
+   Slug 133 · Products Assigned 209 · Status 125 · Actions 158. Card rows
+   below 1200px mirror the Products table so the two store tables stay in
+   sync (app stacks its tables earlier than the standalone prototype).
+   ===================================================================== */
+.ccard-tools { display: flex; justify-content: flex-end; }
+.ccard-tools .sv-add { flex: 0 0 auto; width: 150px; height: 40px; justify-content: center; }
+.ctab-row { position: relative; display: grid; grid-template-columns: minmax(0, 260fr) minmax(0, 133fr) minmax(0, 209fr) minmax(0, 125fr) minmax(0, 158fr); align-items: center; min-height: 92px; padding: 10px 16px; font-size: 12.5px; color: #000; }
+.ctab-row > * { min-width: 0; padding-right: 12px; }
+.ctab-row > *:not(.c-act) { overflow: hidden; }
+.ctab-row.head { min-height: 56px; padding-top: 0; padding-bottom: 0; background: #f5f5f5; font-size: 13px; font-weight: 600; }
+#cat-rows .ctab-row + .ctab-row { border-top: 1px solid rgb(0 0 0 / .08); }
+#cat-rows .ctab-row:hover { background: #fcfcfa; }
+#cat-rows { border-radius: 0 0 12px 12px; min-height: 120px; }
+.ccell { display: flex; align-items: center; gap: 9px; }
+.cthumb { position: relative; width: 48px; height: 48px; flex-shrink: 0; border-radius: 6px; overflow: hidden; display: grid; place-items: center; font-size: 24px; line-height: 1; background: var(--tb, #eeece6); }
+.cthumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.ccell .ptxt strong { font-size: 12.5px; font-weight: 600; }
+.ccell .ptxt small { font-size: 11px; margin-top: 4px; }
+.ccell .ptxt .cparent { color: var(--muted); margin-top: 2px; }
+.c-slug, .c-count { text-overflow: ellipsis; white-space: nowrap; }
+.cpill { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 6px; font-size: 12px; font-weight: 500; white-space: nowrap; background: #e6f5ee; color: #1f9d5b; }
+.cpill::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.cpill.off { background: #ececec; color: #6b6b6b; }
+.ctab-row .edit-btn { height: 34px; padding: 0 16px; gap: 7px; font-size: 13px; }
+.cf-fields { gap: 16px; margin-top: 18px; }
+.cf-fields textarea.pf-input { height: 96px; }
+.opt-note { font-weight: 400; color: #8c8c83; }
+
+@media (max-width: 1200px) {
+  .ctab-row.head { display: none; }
+  .c-slug, .c-count { display: none; }
+  .ctab-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto; gap: 6px 16px; min-height: 0; padding: 14px 16px; }
+  .ctab-row > * { padding-right: 0; }
+  .ccell { grid-column: 1; grid-row: 1 / span 2; align-self: center; gap: 12px; }
+  .c-cstatus { grid-column: 2; grid-row: 1; justify-self: end; }
+  .ccell .ptxt .pmeta { display: block; white-space: normal; color: var(--muted); line-height: 1.45; }
+  .ccell .ptxt strong { font-size: 13.5px; }
+  .ctab-row .c-act { grid-column: 2 !important; grid-row: 2; justify-self: end; align-self: end; gap: 6px !important; }
+}
+
+@media (max-width: 760px) {
+  .ccard-tools .sv-add { flex: 1 1 100%; width: 100%; height: 44px; }
+  .ccell .ptxt strong { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .ccell .ptxt small { font-size: 12px; white-space: normal; line-height: 1.4; }
+  .ctab-row .edit-btn { height: 34px; padding: 0 12px; }
+  .cpill { height: 24px; padding: 0 9px; font-size: 11.5px; }
+}
+
+@media (max-width: 480px) {
+  .cf-fields { gap: 12px; }
+}
+
+@media (max-width: 400px) {
+  .ccell { grid-row: 1; }
+  .ctab-row .c-act { grid-column: 1 / -1 !important; grid-row: 2; justify-self: stretch; justify-content: flex-end; padding-top: 2px; }
+  .cthumb { width: 44px; height: 44px; font-size: 22px; }
+}
+
+/* =====================================================================
+   MOBILE & TABLET PASS — store screens (products, orders, pages,
+   categories) and their dialogs. Ported from
+   digital-romanian-screen-responsive (4).html (L1767-1773, 1915-1947,
+   ۔2029-2034, 2125-2166, 2200). The Overview screen is deliberately
+   excluded.
+   ===================================================================== */
+
+/* Applies at every size */
+.pthumb { position: relative; }
+.pthumb img { position: absolute; inset: 0; }
+.sv-search { min-width: 0; max-width: 100%; }
+.sv-search input { width: 100%; }
+.pf-foot .pf-btn, .od-foot .od-btn { white-space: nowrap; }
+
+/* Labels that must never break onto two lines */
+.spill, .spill2, .fpill, .cpill, .rpill, .pay, .status, .wst, .tag, .edit-btn, .o-view, .c-sku, .o-id, .btn-dark, .btn-light, .sv-add, .ofilter-btn { white-space: nowrap; }
+.more-menu button, .more-menu a { white-space: nowrap; }
+.ccell .ptxt small { white-space: normal; }
+
+/* Desktop tables keep a gap between the last two columns */
+.otab-row .o-ful { padding-right: 16px; }
+.otab-row .o-act { justify-self: end; }
+
+/* ≤ 1100px: card headers stack instead of squeezing the search box */
+@media (max-width: 1100px) {
+  .pcard-head, .ccard-head { grid-template-columns: minmax(0, 1fr) !important; row-gap: 14px; }
+  .pcard-tools, .ocard-tools, .ccard-tools { padding: 0 !important; justify-content: flex-start; }
+  .pcard-tools .sv-search { flex: 1 1 auto; width: auto; }
+  .pcard-tools .sv-add { flex: 0 0 auto; padding: 0 18px; }
+  .ocard-tools .ofilter { flex: 0 0 auto; }
+  .ccard-tools .sv-add { width: auto; padding: 0 18px; }
+  .otab-row .o-ful { padding-right: 0; }
+}
+
+/* ≤ 760px: phone refinements for the store tables */
+@media (max-width: 760px) {
+  .edit-btn, .wrow .edit-btn { height: 34px; padding: 0 12px; font-size: 13px; }
+  .o-view { display: inline-flex; align-items: center; height: 34px; padding: 0 4px; font-size: 13px; }
+  .pcard-head { padding: 14px; }
+  .ov .pcard-head h2, .ov .ccard-head h2 { font-size: 17px; }
+  .pcard-head p { font-size: 12.5px; }
+  .pcard-tools .sv-search, .wp-tools .sv-search, .pcard-tools .sv-add, .wp-tools .sv-add { height: 44px; }
+  .sv-search input { font-size: 16px; }
+  .sv-search input::placeholder { font-size: 14px; }
+  .ocard-tools { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+  .ofilter-btn, .btn-export { height: 44px; font-size: 13px; }
+  .wp-card { padding: 0; }
+  .wtab { border: 0; }
+  .ptab-row, .wrow, .otab-row { gap: 6px 12px; padding: 14px; }
+  .pcell, .wname, .o-cust { grid-column: 1; grid-row: 1 / span 2; align-self: center; }
+  .c-status, .w-status, .o-ful { grid-column: 2; grid-row: 1; justify-self: end; }
+  .c-act, .o-act { grid-column: 2 !important; grid-row: 2; justify-self: end; align-self: end; gap: 4px !important; text-align: right; }
+  .ptxt strong { font-size: 13.5px; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .ptxt small { font-size: 12px; }
+  .ptxt .pmeta, .otab-row .pmeta, .wname .wmeta { white-space: normal; overflow: visible; line-height: 1.45; font-size: 12px; }
+  .pthumb { width: 48px; height: 48px; }
+  .pcell { gap: 12px; }
+  .o-cust { gap: 10px; }
+  .oav { width: 34px; height: 34px; font-size: 11px; }
+  .o-cust .ptxt strong { font-size: 13.5px; }
+  .wname strong { font-size: 14px; }
+  .wic { width: 30px; height: 30px; border-radius: 8px; }
+  .spill2, .fpill { height: 24px; padding: 0 9px; font-size: 11.5px; }
+  .sv-foot { flex-direction: column; align-items: center; gap: 10px; font-size: 12.5px; text-align: center; }
+  .pager button, .pager span { min-width: 34px; height: 34px; font-size: 13px; }
+  /* Orders: filter button reads "Filter: All Statuses ⌄" left to right */
+  .ofilter-btn { justify-content: flex-start; gap: 6px; }
+  .ofilter-btn svg { margin-left: auto; }
+}
+
+/* ≤ 480px: store toolbars stack, dialogs become readable bottom sheets */
+@media (max-width: 480px) {
+  .pcard-tools { flex-wrap: wrap; }
+  .pcard-tools .sv-search, .pcard-tools .sv-add, .ccard-tools .sv-add { flex: 1 1 100%; width: 100%; justify-content: center; }
+  .ocard-tools { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .ofilter-btn { width: 100%; justify-content: flex-start; gap: 6px; }
+  .ofilter-btn svg { margin-left: auto; }
+  .btn-export { width: 100%; display: flex; align-items: center; justify-content: center; }
+  .modal-product form { padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px)); }
+  .pf-head h2 { font-size: 18px; } .pf-head p { font-size: 13px; }
+  .pf-drop { height: 140px; }
+  .pf-drop strong { font-size: 13px; } .pf-drop small { font-size: 11.5px; }
+  .pf-fields.pf-grid { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .pf-field label { font-size: 13px; margin-bottom: 6px; }
+  .pf-input, .pf-box { height: 44px; font-size: 16px; }
+  .pf-box > span { width: 34px; font-size: 14px; }
+  .pf-input::placeholder, .pf-box input::placeholder { font-size: 14px; }
+  textarea.pf-input, .pf-grid textarea.pf-input { height: 88px; }
+  .pf-err { font-size: 12.5px; } .pf-count { font-size: 11.5px; }
+  .pf-foot { position: sticky; bottom: calc(-16px - env(safe-area-inset-bottom, 0px)); }
+  .pf-foot .pf-btn { height: 46px; }
+  /* Order details dialog */
+  .od-foot { gap: 10px; }
+  .od-foot > *, .od-foot .od-btn { flex: 1; width: 100%; }
+  .od-foot .od-btn { height: 46px; font-size: 14px; }
+  .more-menu.od-menu { left: 0; right: 0; min-width: 0; }
+}
+
+/* ≤ 400px: product & page rows give the actions their own line */
+@media (max-width: 400px) {
+  .ptab-row .pcell, .wrow .wname { grid-row: 1; }
+  .ptab-row .c-act, .wrow .c-act { grid-column: 1 / -1 !important; grid-row: 2; justify-self: stretch; justify-content: flex-end; padding-top: 2px; }
+  .pthumb { width: 44px; height: 44px; }
+}
+
+/* ≤ 360px: orders toolbar single column */
+@media (max-width: 360px) {
+  .ocard-tools { grid-template-columns: 1fr; }
+}
+
+/* =====================================================================
+   Site Overview — mobile pass (≤760px / ≤400px). Mirrors the standalone
+   prototype, digital-romanian-screen-responsive (4).html (L1902-1932 and
+   L2060-2094).
+
+   The desktop Figma block above scopes every rule with
+   [data-route="/overview"], which out-specifies this file's earlier
+   single-class mobile pass and keeps the desktop 35px gaps and 226px card
+   heights pinned on phones. These rules sit last and repeat the
+   [data-route="/overview"] scope (stepping through .ov-card/.ov-pages where
+   the element carries it) so they actually win.
+   ===================================================================== */
+@media (max-width: 760px) {
+  [data-route="/overview"] .ov-card.ov-health .hbody {
+    margin-top: 16px;
+    gap: 18px;
+    align-items: center;
+  }
+
+  [data-route="/overview"] .ov-sec+.qstats {
+    gap: 8px;
+  }
+
+  [data-route="/overview"] .qstat.ov-card {
+    min-height: 0;
+    padding: 14px;
+    column-gap: 10px;
+  }
+
+  [data-route="/overview"] .ov-pages.ov-card {
+    min-height: 0;
+    padding: 16px 12px 6px;
+  }
+}
+
+@media (max-width: 400px) {
+  [data-route="/overview"] .ov-card.ov-health,
+  [data-route="/overview"] .ov-card.ov-status {
+    padding: 16px 14px 18px;
+  }
+
+  [data-route="/overview"] .ov-card.ov-health .hbody {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+  }
+
+  [data-route="/overview"] .ov-pages .prow {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 4px 10px;
+    padding: 10px 6px;
+  }
+}
+

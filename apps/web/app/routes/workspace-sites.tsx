@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Form, Link, useActionData, useNavigation } from "react-router";
+import { Form, Link, useActionData, useNavigation, useSubmit } from "react-router";
 import { useWorkspaceChrome } from "~/components/workspace-shell";
 import { handleWorkspaceAction } from "~/lib/workspace-actions.server";
 import { timeAgo } from "~/lib/workspace-view";
@@ -40,6 +40,7 @@ export default function WorkspaceSites() {
   const { data, currentId, openCreateWs } = useWorkspaceChrome();
   const actionResult = useActionData<typeof action>();
   const navigation = useNavigation();
+  const submit = useSubmit();
   const [siteFilter, setSiteFilter] = useState<"all" | "draft" | "published">("all");
   const [siteQuery, setSiteQuery] = useState("");
   const [moreOpen, setMoreOpen] = useState<string | null>(null);
@@ -137,17 +138,21 @@ export default function WorkspaceSites() {
               onChange={(e) => setSiteQuery(e.target.value)}
             />
           </div>
-          {/* [data-new-site] in the standalone file. */}
-          <Form method="post">
-            <input type="hidden" name="intent" value="create-site" />
-            <input type="hidden" name="workspaceId" value={current.id} />
-            <button type="submit" className="btn-dark" data-new-site disabled={creating}>
-              {icon("i-plus", 18)}
-              <span>
-                Create new <span className="long">website</span>
-              </span>
-            </button>
-          </Form>
+          {/* [data-new-site] in the standalone file. A plain button, matching
+              the prototype's markup, so the mobile `.search-box + .btn-dark`
+             rule lines the two up; the POST still goes through the action. */}
+          <button
+            type="button"
+            className="btn-dark"
+            data-new-site
+            disabled={creating}
+            onClick={() => submit({ intent: "create-site", workspaceId: current.id }, { method: "post" })}
+          >
+            {icon("i-plus", 18)}
+            <span>
+              Create new <span className="long">website</span>
+            </span>
+          </button>
         </div>
       </div>
 

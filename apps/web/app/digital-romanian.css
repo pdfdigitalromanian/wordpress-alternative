@@ -312,7 +312,7 @@ h1[tabindex="-1"]:focus {  outline: none;  }
 .switcher-empty {  font-size: 14px; color: var(--muted); padding: 8px 16px;  }
 .switcher-empty[hidden] {  display: none;  }
 .shell {  flex: 1; min-height: 0; display: flex;  }
-.sidebar {  width: 240px; flex-shrink: 0; overflow-y: auto; scrollbar-width: none; background: #fff; box-shadow: 0 16px 10px 3px rgb(0 0 0 / .1); padding: calc(44px * var(--k, 1)) 19px calc(24px * var(--k, 1));  }
+.sidebar {  width: 240px; flex-shrink: 0; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; background: #fff; box-shadow: 0 16px 10px 3px rgb(0 0 0 / .1); padding: calc(44px * var(--k, 1)) 19px calc(24px * var(--k, 1));  }
 .nav {  display: grid; gap: calc(17px * var(--k, 1));  }
 .nav > li:first-child {  margin-bottom: calc(17px * var(--k, 1));  }
 .nav-link, .nav-group-btn {  width: 100%; display: flex; align-items: center; gap: 10px; min-height: max(32px, calc(39px * var(--k, 1))); padding: 0 10px; border-radius: 8px; font-size: 16px; font-weight: 500; line-height: 19px; color: var(--ink); text-decoration: none; text-align: left;  }
@@ -748,6 +748,7 @@ button:where(.btn-text, .onb-skip, .create-site, .icon-btn, .more-btn, .menu-tog
        block of its own around them. */
 .wsd-new-site { display: contents; }
 .wsd-new-site .btn-dark,
+.wsd-tools form,
 .sites form { display: contents; }
 button:where(.btn-dark, .site-new)[disabled] { opacity: .5; cursor: not-allowed; }
 /* 2. The switcher's action row is a flex/grid of buttons only. "Sign out" used
@@ -1070,7 +1071,7 @@ button.prow:hover { background: #fbfaf6; }
 .ov-empty h2 { font-size: 18px; }
 .ov-empty p { font-size: 14px; color: var(--muted); margin: 8px auto 18px; max-width: 420px; line-height: 1.5; }
 
-@media (max-width: 1100px) {
+@media (max-width: 1280px) {
   .ov-top, .ov-bottom { grid-template-columns: minmax(0, 1fr); }
   .qstats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -1356,7 +1357,7 @@ button.prow:hover { background: #fbfaf6; }
 
 @media (min-width: 761px) {
   [data-route="/overview"] .hbody > div:last-child { padding-top: 18px; }
-  [data-route="/overview"] .srow { grid-template-columns: 17px 134px 164px minmax(0, 1fr); gap: 14px; min-height: 53px; padding: 0 12px 0 9px; }
+  [data-route="/overview"] .srow { grid-template-columns: 17px minmax(0, 134px) minmax(0, 1fr) auto; gap: 14px; min-height: 53px; padding: 0 12px 0 9px; }
   [data-route="/overview"] .srow:nth-child(1) { padding-top: 4px; }
   [data-route="/overview"] .srow:nth-child(2) { min-height: 51px; }
   [data-route="/overview"] .srow:nth-child(3) { min-height: 58px; }
@@ -1365,6 +1366,309 @@ button.prow:hover { background: #fbfaf6; }
   [data-route="/overview"] .prow { grid-template-columns: 150px 153px 153px minmax(0, 1fr) 20px; gap: 0; min-height: 50px; padding: 0 2px 0 9px; }
   [data-route="/overview"] .qstat { column-gap: 22px; min-height: 121px; padding: 14px 20px 14px 21px; }
 }
-@media (min-width: 1101px) {
+@media (min-width: 1281px) {
   [data-route="/overview"] .ov-bottom { grid-template-columns: 724px minmax(0, 1fr); }
+}
+
+/* =====================================================================
+   Workspace responsiveness — Team, General settings and the workspace
+   header. The sidebar keeps a 240px column until 760px, so the content
+   region is much narrower than the viewport well before that. These
+   break points stack the multi-column layouts once the content no longer
+   fits, instead of letting columns squash and overflow.
+   ===================================================================== */
+
+@media (max-width: 1100px) {
+  /* Templates composite row and the 5-up settings stat row would squash
+     before the sidebar collapses, so drop the columns. */
+  .stats.c5 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .comps {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  /* General settings: one profile card that was a fixed three-column grid. */
+  .setcols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .setcol {
+    padding: 20px 0;
+  }
+
+  .setcol:first-child {
+    padding-top: 0;
+  }
+
+  .setcol:last-child {
+    padding-bottom: 0;
+  }
+
+  .setcol+.setcol {
+    border-top: 1px solid rgb(0 0 0 / .12);
+  }
+
+  .setcol+.setcol::before {
+    display: none;
+  }
+
+  .setcol .sbody {
+    max-width: 420px;
+  }
+
+  .sbtns {
+    justify-content: flex-start;
+    padding-top: 18px;
+    gap: 10px;
+  }
+}
+
+@media (max-width: 760px) {
+  /* Team and Templates stat rows stack to two columns; the composite row
+     follows suit. */
+  .stats.c4,
+  .stats.c5 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .comps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* Team table: restack each row into a card (who / action on the first
+     line, the attributes stacked underneath) and drop the header row. */
+  .mtable {
+    padding: 4px 16px 8px;
+  }
+
+  .mrow {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 8px 12px;
+    min-height: 0;
+    padding: 16px 4px;
+  }
+
+  .mrow > * {
+    padding-right: 0;
+  }
+
+  .mrow.head {
+    display: none;
+  }
+
+  .mrow .who {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .mrow .menu-cell {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: start;
+  }
+
+  .mrow>.cell {
+    grid-column: 1;
+    padding-left: 48px;
+  }
+
+  .setcard {
+    padding: 18px 16px 20px;
+  }
+}
+
+/* The workspace "Total websites / Draft / Published" row (the base .stats
+   grid) keeps its three columns at every width, matching the prototype; at
+   ≤360px the leading icon is dropped instead of the columns. */
+
+/* =====================================================================
+   MOBILE & TABLET PASS — workspace, templates, team, settings, auth and
+   dialogs. Ported from digital-romanian-screen-responsive (4).html
+   (L1767-2034, 2168-2218). The site Overview screen is deliberately NOT
+   included; the store screens live in routes/overview.css.
+   ===================================================================== */
+
+/* Applies at every size */
+.wsd-top-brand { display: none; }
+/* The drawer's close button (and the site sidebar's header) must never be
+   visible while the drawer is closed. At very narrow widths the drawer is
+   narrower than its own content, so the close button used to overflow past the
+   off-canvas edge and into the viewport. */
+.wsd-side:not(.open) .menu-close { visibility: hidden; }
+.sidebar:not(.open) .sidebar-head { visibility: hidden; }
+.modal-foot .btn-inline, .modal-foot .btn-danger { white-space: nowrap; }
+
+@media (max-width: 1100px) {
+  .tpls, .sites { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+}
+
+@media (max-width: 760px) {
+  /* Tap targets */
+  .more-btn { width: 36px; height: 34px; }
+  .mrow .menu-cell .more-btn { width: 36px; margin-right: -6px; }
+  .icon-btn { width: 40px; height: 40px; }
+  .me-btn { padding: 4px; }
+
+  /* Prototype picker */
+  .proto { right: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
+  .proto-fab { width: 40px; height: 40px; opacity: .92; }
+
+  /* Auth & onboarding */
+  .auth-socials { gap: 8px; }
+  .chip-input input, .input-group input { font-size: 16px; }
+  .chip-input input::placeholder { font-size: 14px; }
+
+  /* Workspace top bar: show which workspace you are in */
+  .wsd-top { gap: 10px; }
+  .wsd-top-brand { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 15px; font-weight: 600; color: var(--ink); text-decoration: none; }
+  .wsd-top-brand .wmark { --s: 26px !important; }
+  .wsd-top-brand .ws-switch-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wsd-top .spacer { flex: 1; }
+
+  /* Workspace page headers */
+  .wsd-head { gap: 16px; }
+  .wsd-head p { font-size: 14px; }
+  .wsd-tools { gap: 8px; flex-wrap: nowrap; }
+  .search-box input, .wsd-tools .btn-dark, .wsd-tools .btn-light, .wsd-tools .btn-save { height: 44px; }
+  .wsd-tools .btn-save { flex: 1; }
+  .wsd-tools .btn-save + .btn-dark { flex: 1; justify-content: center; }
+
+  /* Stat tiles */
+  .stats { gap: 8px; }
+  .stat { padding: 12px; gap: 8px; }
+  .stat small { font-size: 12px; line-height: 1.3; }
+  .stat strong { font-size: 20px; }
+  .stats.c4 .stat, .stats.c5 .stat { flex-direction: row; align-items: center; }
+
+  /* All sites + templates: two columns, compact create row */
+  .sites, .tpls { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+  .site-new { grid-column: 1 / -1; min-height: 0; text-align: left; padding: 14px 16px; display: grid; grid-template-columns: 44px 1fr; grid-template-rows: auto auto; column-gap: 14px; row-gap: 2px; align-items: center; }
+  .site-new .plus { grid-row: 1 / span 2; margin: 0; }
+  .site-new strong, .site-new span:last-child { margin: 0; }
+  .site { min-height: 0; padding: 8px; }
+  .tpl { padding: 8px; }
+  .tpl .site-foot { padding-top: 10px; }
+  .tag { height: 20px; font-size: 10.5px; }
+  .tpl p { font-size: 12px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .site .site-foot { padding-top: 10px; }
+  .comps { gap: 8px; }
+  .comp { padding: 12px; gap: 10px; }
+  .comp > svg:last-child { display: none; }
+
+  /* Team */
+  .mrow .who strong { font-size: 14px; }
+  .mrow .who small { font-size: 12.5px; }
+  .mrow .cell { font-size: 13px; }
+
+  /* General settings */
+  .setcard > h2 { margin-bottom: 14px; }
+  .setcol { gap: 12px; }
+  .setcol .shelp { font-size: 12.5px; line-height: 1.5; }
+  .setcol .sinput, .setcol select { max-width: none; height: 44px; font-size: 16px; }
+  .sbtns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; justify-content: stretch; }
+  .sbtn { height: 40px; justify-content: center; padding: 0 8px; }
+  .url-copy { height: 44px; width: 100%; justify-content: center; }
+  .url-row .input-group { --control-h: 44px; }
+  .dz-head .dz-t { align-items: flex-start; }
+  .dz-row { align-items: start; gap: 12px; }
+  .dz-row .ric { width: 36px; height: 36px; }
+  .dz-row > button { height: 44px; margin-top: 4px; }
+
+  /* Site switcher and sidebar drawer */
+  .topbar.has-extras .switcher-btn { height: 36px; font-size: 14px; }
+  .store-sub a { min-height: 38px; font-size: 14px; }
+  .nav.nav-flat .nav-link { min-height: 44px; }
+  .wsd-nav a { height: 44px; }
+}
+
+@media (max-width: 480px) {
+  /* Dialogs become bottom sheets: roomier controls, safe-area footers */
+  .modal-foot { padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px)); }
+  .modal-foot .btn-inline, .modal-foot .btn-danger { flex: 1; height: 46px; }
+  .modal-head { padding: 18px 16px 14px; }
+  .modal-body { padding: 18px 16px 8px; }
+  .modal-invite .modal-body { padding: 10px 16px 16px; }
+  .inv-access { gap: 8px; }
+  .seg { width: 100%; } .seg label { flex: 1; } .seg span { justify-content: center; height: 36px; }
+  .srole-pick, .srole-btn { width: 100%; }
+
+  /* Danger dialogs */
+  .dlist { padding: 12px; } .dlist li { font-size: 13px; align-items: flex-start; }
+  .dlist li svg { margin-top: 3px; }
+  .confirm-label code { word-break: break-all; }
+
+  /* Auth cards: use the full width, lose the floating-card frame */
+  .auth-page { padding-left: 12px; padding-right: 12px; }
+  .auth-card { padding-left: 18px; padding-right: 18px; }
+  .invite-details div { grid-template-columns: 1fr; gap: 0; padding: 8px 0; min-height: 0; }
+}
+
+@media (max-width: 360px) {
+  .sites, .tpls { grid-template-columns: minmax(0, 1fr); }
+  .stats:not(.c4):not(.c5) .stat .ic { display: none; }
+  .wsd-head h1 { font-size: 22px; }
+  .comps { grid-template-columns: minmax(0, 1fr); }
+  .auth-socials { gap: 6px; }
+  .wsd-tools .btn-dark .long { display: none; }
+  .topbar-brand .dr-logo { width: 28px; }
+  .topbar .tb-right .icon-btn, .wsd-top .icon-btn { display: none; }
+  .topbar { gap: 8px; }
+  .pager { gap: 2px; } .pager button, .pager span { min-width: 30px; }
+  .sbtns { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* NO OVERLAP / NO SQUASH PASS — workspace (labels, toolbars, invite) */
+.more-menu button, .more-menu a { white-space: nowrap; }
+
+@media (max-width: 480px) {
+  .wsd-tools { flex-wrap: wrap; }
+  .wsd-tools .search-box { flex: 1 1 100%; }
+  .wsd-tools .search-box + .btn-dark { flex: 1 1 100%; justify-content: center; }
+  .wsd-tools .btn-dark .long { display: inline; }
+  .inv-title h2 { white-space: normal; overflow: visible; font-size: 17px; line-height: 1.3; }
+  .suggest li small { white-space: normal; overflow-wrap: anywhere; }
+  .echip span { white-space: normal; overflow-wrap: anywhere; }
+}
+
+/* Team members: a real table down to 900px (emails wrap), stacked rows below */
+@media (min-width: 761px) and (max-width: 1100px) {
+  .stats.c4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stats.c5 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .mrow { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr) auto 36px; padding: 14px 8px; }
+  .mrow .who small { white-space: normal; overflow-wrap: anywhere; }
+}
+@media (min-width: 761px) and (max-width: 900px) {
+  .mrow.head { display: none; }
+  .mrow { grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; min-height: 0; padding: 16px 8px; align-items: start; }
+  .mrow > * { padding-right: 0; }
+  .mrow .who { grid-column: 1; grid-row: 1; }
+  .mrow .menu-cell { grid-column: 2; grid-row: 1; align-self: start; }
+  .mrow > .cell { grid-column: 1; padding-left: 48px; }
+}
+
+/* Short screens: invite dialog scrolls instead of letting its footer cover fields */
+@media (max-width: 480px), (max-height: 640px) {
+  .modal-invite form { min-height: 0; }
+  .modal-invite .modal-body { overflow-y: auto; overscroll-behavior: contain; }
+}
+
+/* ≤ 420px: invite field stacks the role picker under the emails */
+@media (max-width: 420px) {
+  .inv-field { flex-direction: column; }
+  .inv-field .role-pick, .inv-field .role-btn { width: 100%; }
+  .inv-field .chip-input { width: 100%; flex: 0 0 auto; }
+  .inv-field .chip-input input { min-width: 0; flex: 1 1 100%; }
+  .inv-field .role-btn { border-left: 0; border-top: 1px solid var(--line); height: 44px; justify-content: space-between; border-radius: 0 0 4px 4px; }
+  .inv-field .role-menu { left: -2px; right: -2px; width: auto; }
+}
+
+/* Short screens (landscape phones): sidebar switcher scrolls with the menu */
+@media (max-height: 520px) {
+  .ov-foot { position: static; margin-top: 16px; }
+  .sidebar .nav { flex: 0 0 auto; }
+  .wsd-nav { overflow: visible; flex: 0 0 auto; }
+  .wsd-side { overflow-y: auto; }
 }
