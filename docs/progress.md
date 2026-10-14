@@ -554,6 +554,14 @@ hosted writes, nothing deployed.
   `/onboarding/workspace` (or `/workspace`) when a `display_name` is set.
   Editing (`?returnTo=`, from the account menu) is exempt so "Edit profile"
   still opens the form.
+- **Workspace logo preview is now a circle** (`digital-romanian.css`): the
+  `.picker.square` face and its modal override were `border-radius: 22px` /
+  `18px` (a rounded square, per `digital-romanian-screen.html:536`) while
+  the Settings workspace avatar (`.sic .ws-av`) is a circle - the mismatch
+  read as "sometimes not a circle / oval". Both picker faces are now
+  `border-radius: 50%` so the uploaded logo is a perfect circle everywhere
+  it is previewed. This deliberately deviates from the prototype's rounded
+  square.
 
 Verification: `pnpm --filter @digital-romanian/web typecheck` clean and
 `pnpm --filter @digital-romanian/web build` clean. Browser-verified via
