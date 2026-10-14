@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Link } from "react-router";
 import { slugify } from "~/lib/slugify";
 
@@ -80,9 +80,18 @@ export type Product = {
   /* Prototype products carry their own photo id; a product added through the
      dialog doesn't, and thumbSrc() falls back to the category photo. */
   photo?: string;
-  status: "published" | "draft";
+  status: "published" | "draft" | "archived";
   img: string | null;
   desc: string;
+  seo?: ProductSeo;
+};
+
+export type ProductSeo = {
+  title: string;
+  meta: string;
+  slug: string;
+  index: boolean;
+  auto: { title: boolean; meta: boolean; slug: boolean };
 };
 
 export type ProductDraft = {
@@ -95,6 +104,7 @@ export type ProductDraft = {
   desc: string;
   img: string | null;
   sub: string;
+  seo: ProductSeo;
 };
 
 type SiteLite = { id: string; theme: string };
@@ -172,6 +182,25 @@ const abbr = (n: string) =>
 
 export const money = (n: number) => "$" + Number(n).toFixed(2);
 
+/* Product SEO (mirrors digital-romanian-screen.html's seoSlug/seoTwo/seoCut). */
+const SEO_T = 60;
+const SEO_D = 160;
+const seoSlugify = (n: string) =>
+  "/products/" +
+  n
+    .toLowerCase()
+    .replace(/\(.*?\)/g, (m) => m.slice(1, -1))
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+const seoTwo = (t: string) => {
+  const m = t
+    .replace(/\s+/g, " ")
+    .trim()
+    .match(/[^.!?]+[.!?]+/g);
+  return m ? m.slice(0, 2).join(" ").trim() : t.trim();
+};
+const seoCut = (t: string, n: number) => (t.length > n ? t.slice(0, n - 1).trimEnd() + "\u2026" : t);
+
 /* storeOf(s): the demo catalogue. The prototype gates this on
    isShop(s) (theme alicia/sun), which leaves a brand-new "Untitled site"
    (theme plain) with an empty products table and Services/Case Studies pages
@@ -231,7 +260,9 @@ function wIcon(k: string) {
 }
 
 const statusPill = (p: Product) =>
-  p.status === "draft" ? (
+  p.status === "archived" ? (
+    <span className="spill2 archived">Archived</span>
+  ) : p.status === "draft" ? (
     <span className="spill2 draft">Draft</span>
   ) : p.stock === 0 ? (
     <span className="spill2 out">Out of Stock</span>
@@ -372,19 +403,21 @@ function Pager({ current, pages, onChange, label = "Product pages" }: { current:
 
 /* --------------------------------------------------------- products view */
 
-const FILTERS: Record<string, string> = { all: "All products", published: "Published", draft: "Draft", out: "Out of stock" };
-type FilterKey = "all" | "published" | "draft" | "out";
+const FILTERS: Record<string, string> = { all: "All products", published: "Published", draft: "Draft", archived: "Archived", out: "Out of stock" };
+type FilterKey = "all" | "published" | "draft" | "archived" | "out";
 
 const PER_PAGE = 8;
 
 export function ProductsView({
   site,
+  d,
   products,
   setProducts,
   showToast,
   showToastAction,
 }: {
-  site: SiteLite;
+  site: SiteLite & { name: string };
+  d?: { domain: string } | null;
   products: Product[];
   setProducts: (updater: (list: Product[]) => Product[]) => void;
   showToast: (text: string) => void;
@@ -399,7 +432,13 @@ export function ProductsView({
   const list = products.filter(
     (p) =>
       (filter === "all" ||
-        (filter === "out" ? p.stock === 0 && p.status !== "draft" : filter === "draft" ? p.status === "draft" : p.status === "published" && p.stock > 0)) &&
+        (filter === "out"
+          ? p.stock === 0 && p.status === "published"
+          : filter === "draft"
+            ? p.status === "draft"
+            : filter === "archived"
+              ? p.status === "archived"
+              : p.status === "published" && p.stock > 0)) &&
       (!q || [p.name, p.sub, p.sku, p.cat].some((x) => x.toLowerCase().includes(q))),
   );
   const pages = Math.max(1, Math.ceil(list.length / PER_PAGE));
@@ -423,10 +462,15 @@ export function ProductsView({
     showToast(`${src.name} duplicated as a draft`);
   };
 
-  const toggleStatus = (src: Product) => {
-    const now: "published" | "draft" = src.status === "draft" ? "published" : "draft";
+  const toggleArchive = (src: Product) => {
+    const now: Product["status"] = src.status === "archived" ? "published" : "archived";
     setProducts((list) => list.map((x) => (x.id === src.id ? { ...x, status: now } : x)));
-    showToast(`${src.name} ${now === "draft" ? "moved to draft" : "published"}`);
+    showToast(`${src.name} ${now === "archived" ? "archived" : "restored"}`);
+  };
+
+  const publish = (src: Product) => {
+    setProducts((list) => list.map((x) => (x.id === src.id ? { ...x, status: "published" } : x)));
+    showToast(`${src.name} published`);
   };
 
   const remove = (src: Product) => {
@@ -547,8 +591,10 @@ export function ProductsView({
                   <MoreMenu
                     ariaLabel={`More actions for ${p.name}`}
                     items={[
+                      { kind: "item", label: "Edit", onSelect: () => openDialog(p) },
                       { kind: "item", label: "Duplicate", onSelect: () => duplicate(p) },
-                      { kind: "item", label: p.status === "draft" ? "Publish" : "Move to draft", onSelect: () => toggleStatus(p) },
+                      ...(p.status === "draft" ? [{ kind: "item" as const, label: "Publish", onSelect: () => publish(p) }] : []),
+                      { kind: "item", label: p.status === "archived" ? "Restore" : "Archive", onSelect: () => toggleArchive(p) },
                       { kind: "divider" },
                       { kind: "item", label: "Delete product", danger: true, onSelect: () => remove(p) },
                     ]}
@@ -599,6 +645,9 @@ export function ProductsView({
           key={dialog.edit?.id ?? "new"}
           products={products}
           edit={dialog.edit}
+          siteName={site.name}
+          domain={d?.domain ?? "yourwebsite.com"}
+          showToast={showToast}
           onCancel={() => setDialog({ open: false, edit: null })}
           onSubmit={(data, edit) => {
             if (edit) {
@@ -632,15 +681,22 @@ export function ProductsView({
 function ProductDialog({
   products,
   edit,
+  siteName,
+  domain,
+  showToast,
   onCancel,
   onSubmit,
 }: {
   products: Product[];
   edit: Product | null;
+  siteName: string;
+  domain: string;
+  showToast: (text: string) => void;
   onCancel: () => void;
   onSubmit: (data: ProductDraft, edit: Product | null) => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const seoRef = useRef<HTMLDialogElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   /* Set right before the effect below closes the dialog itself, so the
@@ -659,6 +715,35 @@ function ProductDialog({
   const [drag, setDrag] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [skuEdited, setSkuEdited] = useState(!!edit);
+
+  /* Product SEO: live preview card + separate editor dialog. auto.* tracks
+     which fields still follow the name/description (like the prototype's
+     seoAuto); when an override is cleared the stored value wins. */
+  const [seo, setSeo] = useState<ProductSeo>(
+    edit?.seo ?? { title: "", meta: "", slug: "", index: true, auto: { title: true, meta: true, slug: true } },
+  );
+  const [seoSnap, setSeoSnap] = useState<ProductSeo | null>(null);
+  const seoApplyRef = useRef(false);
+  const site = { name: siteName || "Your store", domain: domain || "yourwebsite.com" };
+  const sName = name.trim();
+  const seoVal: ProductSeo = {
+    title: seo.auto.title ? (sName ? `${sName} — ${site.name}` : "") : seo.title,
+    meta: seo.auto.meta ? seoTwo(desc) : seo.meta,
+    slug: seo.auto.slug ? (sName ? seoSlugify(sName) : "") : seo.slug,
+    index: seo.index,
+    auto: { ...seo.auto },
+  };
+  const seoPath = seoVal.slug.trim().replace(/^\/+/, "").split("/").filter(Boolean).join(" › ");
+  const seoUrl = site.domain + (seoPath ? " › " + seoPath : "");
+  const seoIni = site.name.charAt(0).toUpperCase();
+  const seoT = seoCut(seoVal.title, SEO_T) || "Page title";
+  const seoD = seoCut(seoVal.meta, SEO_D) || "Add a description and it shows here.";
+
+  const seoCount = (k: "title" | "meta") => {
+    const v = k === "title" ? seoVal.title : seoVal.meta;
+    const lim = k === "title" ? SEO_T : SEO_D;
+    return { v, lim, over: v.length > lim, pct: Math.min(100, (v.length / lim) * 100) };
+  };
 
   /* React's default client entry wraps the tree in StrictMode, whose effect
      replay does cleanup close() -> (async) close event -> onCancel -> the
@@ -740,14 +825,26 @@ function ProductDialog({
         desc: desc.trim(),
         img,
         sub: desc.trim() ? desc.trim().split("\n")[0].slice(0, 40) : edit ? edit.sub : cat,
+        seo: seoVal,
       },
       edit,
     );
   };
 
+  const openSeo = () => {
+    seoApplyRef.current = false;
+    setSeoSnap({ title: seoVal.title, meta: seoVal.meta, slug: seoVal.slug, index: seo.index, auto: { ...seo.auto } });
+    seoRef.current?.showModal();
+    seoRef.current?.querySelector<HTMLInputElement>("#pf-seo-title")?.focus();
+  };
+  const closeSeo = () => {
+    if (!seoApplyRef.current && seoSnap) setSeo(seoSnap);
+  };
+
   const err = (id: string) => errors[id] || "";
 
   return (
+    <>
     <dialog
       className="modal modal-product"
       ref={ref}
@@ -961,6 +1058,26 @@ function ProductDialog({
             />
             <p className="pf-count" aria-live="polite">{desc.length}/500</p>
           </div>
+
+          <div className="pf-seo full">
+            <div className="ps-head">
+              <span className="ps-badge" aria-hidden="true">{icon("i-search", 16, 16, "0 0 16 16")}</span>
+              <span className="ps-label">Search engine listing<small>How this product appears on Google</small></span>
+              <button type="button" className="ps-edit" id="pf-seo-open" onClick={openSeo}>
+                {icon("i-edit", 12)}
+                Edit SEO
+              </button>
+            </div>
+            <div className="ps-card">
+              <div className="ps-top">
+                <span className="gp-fav" id="ps-fav">{seoIni}</span>
+                <span className="ps-site"><b id="ps-site">{site.name}</b><span id="ps-url">{seoUrl}</span></span>
+                <span className={`ps-pill${seo.index ? "" : " off"}`}>{seo.index ? "Visible on Google" : "Hidden from Google"}</span>
+              </div>
+              <div className="ps-t" id="ps-t">{seoT}</div>
+              <div className="ps-d" id="ps-d">{seoD}</div>
+            </div>
+          </div>
         </div>
 
         <div className="pf-foot">
@@ -969,6 +1086,116 @@ function ProductDialog({
         </div>
       </form>
     </dialog>
+
+    <dialog
+      className="modal modal-seo"
+      ref={seoRef}
+      aria-labelledby="seo-title"
+      onClose={closeSeo}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) seoRef.current?.close();
+      }}
+    >
+      <div className="seo-head">
+        <div><h2 id="seo-title">Search engine listing</h2><p>Control how this product looks on Google.</p></div>
+        <button type="button" className="icon-btn" aria-label="Close" onClick={() => seoRef.current?.close()}>
+          {icon("i-close", 18, 18, "0 0 16 16")}
+        </button>
+      </div>
+      <div className="seo-body">
+        <div className="seo-stage" aria-label="Google preview">
+          <div className="seo-q">{icon("i-search", 14, 14, "0 0 16 16")}<span>{`buy ${sName.toLowerCase() || "your product"} online`}</span></div>
+          <div className={`seo-res${seo.index ? "" : " off"}`}>
+            <div className="ps-top">
+              <span className="gp-fav">{seoIni}</span>
+              <span className="ps-site"><b>{site.name}</b><span>{seoUrl}</span></span>
+            </div>
+            <div className="seo-rt">{seoT}</div>
+            <div className="seo-rd">{seoD}</div>
+          </div>
+          <p className="seo-note" hidden={seo.index}>This page is hidden from Google. People with the link can still open it.</p>
+        </div>
+        <div className="seo-fields">
+          <div className="pf-field">
+            <div className="seo-lr">
+              <label htmlFor="pf-seo-title">Page title</label>
+              <span className={seoCount("title").over ? "over" : ""}>{seoCount("title").v.length} / {SEO_T}</span>
+            </div>
+            <input
+              className="pf-input"
+              id="pf-seo-title"
+              autoComplete="off"
+              placeholder="Buy Fresh Whole Broiler Chicken | Debaz Farm"
+              value={seoVal.title}
+              onChange={(e) =>
+                setSeo((s) => ({ ...s, title: e.target.value, auto: { ...s.auto, title: false } }))
+              }
+            />
+            <div className="seo-meter"><i className={seoCount("title").over ? "over" : ""} style={{ width: `${seoCount("title").pct}%` }} /></div>
+          </div>
+          <div className="pf-field">
+            <div className="seo-lr">
+              <label htmlFor="pf-seo-meta">Meta description</label>
+              <span className={seoCount("meta").over ? "over" : ""}>{seoCount("meta").v.length} / {SEO_D}</span>
+            </div>
+            <textarea
+              className="pf-input"
+              id="pf-seo-meta"
+              placeholder="A short line that makes people want to click"
+              value={seoVal.meta}
+              onChange={(e) =>
+                setSeo((s) => ({ ...s, meta: e.target.value, auto: { ...s.auto, meta: false } }))
+              }
+            />
+            <div className="seo-meter"><i className={seoCount("meta").over ? "over" : ""} style={{ width: `${seoCount("meta").pct}%` }} /></div>
+          </div>
+          <div className="pf-field">
+            <div className="seo-lr"><label htmlFor="pf-seo-slug">URL slug</label></div>
+            <div className="pf-box">
+              <span className="seo-dom">{site.domain}</span>
+              <input
+                id="pf-seo-slug"
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="/products/whole-broiler-chicken"
+                value={seoVal.slug}
+                onChange={(e) =>
+                  setSeo((s) => ({ ...s, slug: e.target.value, auto: { ...s.auto, slug: false } }))
+                }
+              />
+            </div>
+          </div>
+          <label className="seo-switch">
+            <span><b>Show on search engines</b><small>Turn off to hide this page from Google. It still works for people who have the link.</small></span>
+            <input type="checkbox" role="switch" checked={seo.index} onChange={(e) => setSeo((s) => ({ ...s, index: e.target.checked }))} />
+          </label>
+        </div>
+      </div>
+      <div className="seo-foot">
+        <button
+          type="button"
+          className="btn-text"
+          onClick={() => setSeo((s) => ({ ...s, auto: { title: true, meta: true, slug: true } }))}
+        >
+          Reset to auto-generated
+        </button>
+        <span className="seo-actions">
+          <button type="button" className="btn-outline pf-btn" onClick={() => seoRef.current?.close()}>Cancel</button>
+          <button
+            type="button"
+            className="btn-primary pf-btn"
+            onClick={() => {
+              seoApplyRef.current = true;
+              seoRef.current?.close();
+              showToast("Search listing updated");
+            }}
+          >
+            Save changes
+          </button>
+        </span>
+      </div>
+    </dialog>
+    </>
   );
 }
 
@@ -1751,6 +1978,7 @@ export type Category = {
   emoji: string;
   tint: string;
   photo: string | null;
+  img: string | null;
   status: "active" | "hidden";
   parent: string | null;
 };
@@ -1773,6 +2001,7 @@ export function generateCategories(site: SiteLite): Category[] {
     emoji,
     tint,
     photo,
+    img: null,
     status: "active" as const,
     parent: null,
   }));
@@ -1860,12 +2089,13 @@ export function CategoriesView({
           <div id="cat-rows" role="rowgroup">
             {rows.map((c) => {
               const parent = c.parent ? categories.find((x) => x.id === c.parent) : null;
+              const thumb = c.img || (c.photo ? photoUrl(c.photo) : null);
               return (
                 <div className="ctab-row" role="row" key={c.id}>
                   <span className="ccell" role="cell">
                     <span className="cthumb" style={{ "--tb": c.tint } as CSSProperties} aria-hidden="true">
                       {c.emoji}
-                      {c.photo ? <img src={photoUrl(c.photo)} alt="" loading="lazy" onError={(e) => e.currentTarget.remove()} /> : null}
+                      {thumb ? <img src={thumb} alt="" loading="lazy" onError={(e) => e.currentTarget.remove()} /> : null}
                     </span>
                     <span className="ptxt">
                       <strong>{c.name}</strong>
@@ -1960,15 +2190,19 @@ function CategoryDialog({
   categories: Category[];
   edit: Category | null;
   onCancel: () => void;
-  onSubmit: (data: { name: string; slug: string; parent: string | null; desc: string }, edit: Category | null) => void;
+  onSubmit: (data: { name: string; slug: string; parent: string | null; desc: string; img: string | null }, edit: Category | null) => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const closingRef = useRef(false);
   const [name, setName] = useState(edit?.name ?? "");
   const [slug, setSlug] = useState(edit?.slug ?? "");
   const [parent, setParent] = useState(edit?.parent ?? "");
   const [desc, setDesc] = useState(edit?.desc ?? "");
+  const [img, setImg] = useState<string | null>(edit?.img ?? null);
+  const [imgErr, setImgErr] = useState("");
+  const [drag, setDrag] = useState(false);
   const [slugEdited, setSlugEdited] = useState(!!edit);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -1995,6 +2229,22 @@ function CategoryDialog({
 
   const clearErr = (id: string) => setErrors((e) => (e[id] ? { ...e, [id]: "" } : e));
 
+  const take = (file?: File | null) => {
+    if (!file) return;
+    if (!/^image\/(png|jpe?g)$/.test(file.type)) {
+      setImgErr("Use a JPG or PNG image.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setImgErr("That image is over 5MB. Pick a smaller one.");
+      return;
+    }
+    setImgErr("");
+    const r = new FileReader();
+    r.onload = () => setImg(String(r.result));
+    r.readAsDataURL(file);
+  };
+
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmedName = name.trim();
@@ -2016,7 +2266,7 @@ function CategoryDialog({
       document.getElementById(first)?.focus();
       return;
     }
-    onSubmit({ name: trimmedName, slug: trimmedSlug, parent: parent || null, desc: desc.trim() }, edit);
+    onSubmit({ name: trimmedName, slug: trimmedSlug, parent: parent || null, desc: desc.trim(), img }, edit);
   };
 
   const err = (id: string) => errors[id] || "";
@@ -2042,6 +2292,57 @@ function CategoryDialog({
             {icon("i-close", 18, 18, "0 0 16 16")}
           </button>
         </div>
+
+        <label
+          className={`pf-drop${img ? " has-img" : ""}${drag ? " drag" : ""}`}
+          id="cf-drop"
+          onDragEnter={(e) => {
+            e.preventDefault();
+            setDrag(true);
+          }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDrag(true);
+          }}
+          onDragLeave={() => setDrag(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDrag(false);
+            take(e.dataTransfer.files?.[0]);
+          }}
+        >
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/png,image/jpeg"
+            aria-label="Upload category image"
+            onChange={(e) => {
+              take(e.target.files?.[0]);
+              e.target.value = "";
+            }}
+          />
+          <svg className="pf-dash" aria-hidden="true">
+            <rect x=".5" y=".5" rx="12" ry="12" />
+          </svg>
+          <span id="cf-drop-body" style={{ display: "contents" }}>
+            {img ? (
+              <img src={img} alt="Category image preview" />
+            ) : (
+              <>
+                {I_CLOUD}
+                <strong>Upload category image</strong>
+                <small>Drag and drop an image, or click to browse</small>
+                <small>JPG, PNG (max 5MB)</small>
+              </>
+            )}
+          </span>
+        </label>
+
+        <div className="pf-imgbar" hidden={!img}>
+          <button type="button" className="btn-text" onClick={() => fileRef.current?.click()}>Replace image</button>
+          <button type="button" className="btn-text" onClick={() => setImg(null)}>Remove</button>
+        </div>
+        <p className="pf-err" role="alert" hidden={!imgErr} style={{ textAlign: "center" }}>{imgErr}</p>
 
         <div className="pf-fields cf-fields">
           <div className="pf-field">
@@ -2604,5 +2905,896 @@ function ShipDialog({
         </div>
       </form>
     </dialog>
+  );
+}
+
+/* =====================================================================
+   Site Analytics (#/overview/analytics) + Site Settings (#/overview/settings)
+   Ported one-for-one from renderAnalyticsView() / renderSettingsView() and the
+   #dlg-domain → #dlg-dns flow in digital-romanian-screen.html.
+   ===================================================================== */
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/* Daily page views for the last 30 days (shape matches the design). */
+const TREND30 = [
+  900, 1150, 1050, 1650, 1850, 1900, 2000, 1950, 1750, 2150, 2450, 2650, 2300, 1700, 2000,
+  2500, 2700, 2550, 2450, 2550, 2600, 2600, 2650, 2800, 2700, 2850, 3000, 2900, 3050, 3350,
+];
+const VISIT_RATIO = 14820 / TREND30.reduce((a, b) => a + b, 0);
+const DELTAS: Record<number, [number, number, number]> = { 7: [4.1, 3.6, 2.9], 30: [12.4, 10.2, 8.2], 90: [18.7, 15.3, 11.6] };
+const CONV: Record<number, number> = { 7: 2.6, 30: 2.4, 90: 2.2 };
+const TF_LABEL: Record<number, string> = { 7: "Last 7 Days", 30: "Last 30 Days", 90: "Last 90 Days" };
+type AnDay = 7 | 30 | 90;
+const AN_DAYS: AnDay[] = [7, 30, 90];
+
+const TOP_SELLERS = [
+  { name: "Whole Broiler Chicken", base: 84, emoji: "🍗", tint: "#f6e3de", photo: "1633096013004-e2cb4023b560" },
+  { name: "New Hope Feed 510", base: 32, emoji: "🌾", tint: "#f3e6d4", photo: "1574323347407-f5e1ad6d020b" },
+  { name: "Fresh Catfish (Live)", base: 19, emoji: "🐟", tint: "#dfe8f7", photo: "1534043464124-3be32fe000c9" },
+];
+const PAGE_SHARE = [6200, 4100, 1800].map((v) => v / 14820);
+const PAGE_TINT = ["#7a2e12", "#2f4f6f", "#2e7d4a"];
+
+const seedOf = (str: string) => [...str].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
+const rnd = (n: number) => {
+  const x = Math.sin(n * 12.9898) * 43758.5453;
+  return x - Math.floor(x);
+};
+const fmtN = (n: number) => Math.round(n).toLocaleString("en-US");
+const fmtDay = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+function niceMax(v: number) {
+  const raw = (Math.max(v, 1) * 1.08) / 4;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((x) => x >= raw) ?? 10 * mag;
+  return step * 4;
+}
+const kfmt = (v: number) => (v >= 1000 ? (v / 1000).toFixed(v % 1000 ? 1 : 0) + "k" : String(v));
+
+const svgStroke = (paths: ReactNode, w = 18, vb = "0 0 16 16") => (
+  <svg width={w} height={w} viewBox={vb} fill="none" aria-hidden="true">
+    {paths}
+  </svg>
+);
+
+/* KI glyphs from renderAnalyticsView(). */
+const K_ICONS: Record<string, ReactNode> = {
+  eye: svgStroke(
+    <>
+      <path d="M1.5 8S3.9 3.5 8 3.5 14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+      <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.4" />
+    </>,
+  ),
+  users: svgStroke(
+    <>
+      <circle cx="6" cy="5.5" r="2.4" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M1.75 13.5c0-2.5 1.9-4 4.25-4s4.25 1.5 4.25 4M11 3.3a2.3 2.3 0 0 1 0 4.4M12.3 9.7c1.2.6 2 1.9 2 3.8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </>,
+  ),
+  bars: svgStroke(
+    <>
+      <rect x="2" y="2" width="12" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M5.25 11V8M8 11V5.5M10.75 11V7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </>,
+  ),
+  conv: svgStroke(
+    <>
+      <path d="M12.5 5.5A5 5 0 0 0 3.6 4.4M3.5 10.5a5 5 0 0 0 8.9 1.1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <path d="M12.75 2.75v2.9h-2.9M3.25 13.25v-2.9h2.9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8 5.75v4.5M6.6 6.9h2.1a.8.8 0 0 1 0 1.6H7.3a.8.8 0 0 0 0 1.6h2.1" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+    </>,
+  ),
+};
+const CAL = svgStroke(
+  <>
+    <rect x="2.25" y="3" width="11.5" height="10.5" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
+    <path d="M2.25 6.5h11.5M5.5 1.75v2.5M10.5 1.75v2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+  </>,
+  15,
+);
+const DL = (
+  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path d="M8 2.5v8M4.8 7.5 8 10.7l3.2-3.2M2.5 13.5h11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+type AnPoint = { date: Date; views: number; visits: number };
+
+function anSeries(site: SiteLite, days: AnDay): AnPoint[] {
+  const seed = seedOf(site.id);
+  const scale = site.id === "s1" ? 1 : 0.3 + (seed % 55) / 100;
+  let views = TREND30.slice();
+  if (days > 30) {
+    const pre = Array.from({ length: days - 30 }, (_, i) => 550 + i * 7 + 260 * Math.sin(i / 3.6) + rnd(seed + i) * 220);
+    views = pre.concat(views);
+  } else {
+    views = views.slice(-days);
+  }
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  return views.map((v, i) => {
+    const jitter = site.id === "s1" ? 1 : 0.88 + rnd(seed * 3 + i) * 0.24;
+    const pv = Math.round(v * scale * jitter);
+    return { date: new Date(today.getTime() - (views.length - 1 - i) * DAY_MS), views: pv, visits: Math.round(pv * VISIT_RATIO) };
+  });
+}
+
+function anCompute(site: SiteLite, days: AnDay) {
+  const ser = anSeries(site, days);
+  const shop = isShopSite(site);
+  const visits = Math.round(ser.reduce((a, d) => a + d.views, 0) * VISIT_RATIO);
+  const k = visits / 14820;
+  return {
+    ser,
+    visits,
+    shop,
+    unique: Math.round((visits * 11104) / 14820),
+    revenue: shop ? Math.round((visits * 482500) / 14820 / 100) * 100 : 0,
+    conv: shop ? CONV[days] : 0,
+    dl: DELTAS[days],
+    pages: generatePages(site).slice(0, 3).map((p, i) => ({ ...p, views: Math.round(visits * PAGE_SHARE[i]) })),
+    sellers: shop ? TOP_SELLERS.map((p) => ({ ...p, sold: Math.max(1, Math.round(p.base * k)) })) : [],
+  };
+}
+
+/* drawChart(): the live trend chart, as a React SVG. The series carries dates
+   computed from `new Date()`, so the plot is measured and drawn only after
+   mount (dims.w stays 0 on the server) to keep SSR deterministic. */
+function TrafficChart({ series, metric, days }: { series: AnPoint[]; metric: "views" | "visits"; days: AnDay }) {
+  const boxRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const tipRef = useRef<HTMLDivElement>(null);
+  const [dims, setDims] = useState<{ w: number; h: number }>({ w: 0, h: 210 });
+  const [idx, setIdx] = useState(-1);
+  const [tipX, setTipX] = useState(0);
+
+  useEffect(() => {
+    const box = boxRef.current;
+    if (!box) return;
+    const measure = () => setDims({ w: Math.max(box.clientWidth, 280), h: box.clientHeight || 210 });
+    measure();
+    if (typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver(measure);
+      ro.observe(box);
+      return () => ro.disconnect();
+    }
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+
+  const n = series.length;
+  const W = dims.w;
+  const H = dims.h;
+  const pl = 34;
+  const pr = 14;
+  const pt = 10;
+  const pb = 30;
+  const iw = W - pl - pr;
+  const ih = H - pt - pb;
+  const x = (i: number) => pl + (n === 1 ? iw / 2 : (i * iw) / (n - 1));
+
+  useEffect(() => {
+    if (idx < 0) return;
+    const half = (tipRef.current?.offsetWidth ?? 0) / 2;
+    const px = x(idx);
+    setTipX(Math.min(Math.max(px, half), W - half));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idx, W, H, n]);
+
+  if (!W || n < 1) return <div className="an-plot" ref={boxRef} />;
+
+  const vals = series.map((d) => d[metric]);
+  const max = niceMax(Math.max(...vals));
+  const y = (v: number) => pt + ih - (v / max) * ih;
+  const pts = vals.map((v, i) => [x(i), y(v)] as const);
+  const line = pts.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(" ");
+  const area = `${line} L${x(n - 1).toFixed(1)} ${(pt + ih).toFixed(1)} L${pl} ${(pt + ih).toFixed(1)} Z`;
+  const every = Math.ceil(n / (W < 520 ? 5 : 10));
+
+  const grid: ReactNode[] = [];
+  for (let t = 0; t <= 4; t++) {
+    const v = (max / 4) * t;
+    const yy = y(v);
+    grid.push(
+      <g key={`g${t}`}>
+        <line className="gl" x1={pl} x2={W - pr} y1={yy} y2={yy} />
+        <text className="yl" x={pl - 10} y={yy + 4} textAnchor="end">{kfmt(v)}</text>
+      </g>,
+    );
+  }
+  const xlabels: ReactNode[] = [];
+  for (let i = n - 1; i >= 0; i -= every) {
+    xlabels.unshift(
+      <text key={`x${i}`} className="xl" x={x(i)} y={H - 6} textAnchor="middle">{fmtDay(series[i].date)}</text>,
+    );
+  }
+  const dots = n <= 45 ? pts.map((p, i) => <circle key={`d${i}`} className="dt" cx={p[0]} cy={p[1]} r="2.6" />) : null;
+  const label = metric === "views" ? "page views" : "visits";
+  const total = vals.reduce((a, b) => a + b, 0);
+  const aria = `Daily ${label}, ${TF_LABEL[days].toLowerCase()}: ${fmtN(total)} in total, peaking at ${fmtN(Math.max(...vals))}. Use the arrow keys to read each day.`;
+
+  const cur = idx >= 0 && idx < n ? idx : -1;
+  const hp = cur >= 0 ? pts[cur] : null;
+  const cd = cur >= 0 ? series[cur] : null;
+
+  const fromEvent = (e: React.PointerEvent<SVGRectElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const frac = r.width ? (e.clientX - r.left) / r.width : 0;
+    setIdx(Math.max(0, Math.min(n - 1, Math.round(frac * (n - 1)))));
+  };
+  const onKey = (e: React.KeyboardEvent<SVGSVGElement>) => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight" && e.key !== "Home" && e.key !== "End") return;
+    e.preventDefault();
+    const base = idx < 0 || idx >= n ? n - 1 : idx;
+    setIdx(e.key === "Home" ? 0 : e.key === "End" ? n - 1 : Math.max(0, Math.min(n - 1, base + (e.key === "ArrowRight" ? 1 : -1))));
+  };
+
+  return (
+    <div className="an-plot" ref={boxRef}>
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${W} ${H}`}
+        tabIndex={0}
+        role="img"
+        aria-label={aria}
+        onKeyDown={onKey}
+        onFocus={() => setIdx(idx >= 0 && idx < n ? idx : n - 1)}
+        onBlur={() => setIdx(-1)}
+      >
+        <defs>
+          <linearGradient id="an-grad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="#2fb57a" stopOpacity=".9" />
+            <stop offset="1" stopColor="#2fb57a" stopOpacity=".06" />
+          </linearGradient>
+        </defs>
+        {grid}
+        <path d={area} fill="url(#an-grad)" />
+        <path className="ln" d={line} />
+        {dots}
+        {xlabels}
+        <g visibility={hp ? "visible" : "hidden"}>
+          <line className="hl" x1={hp?.[0]} x2={hp?.[0]} y1={pt} y2={pt + ih} />
+          <circle className="hd" cx={hp?.[0]} cy={hp?.[1]} r="4.5" />
+        </g>
+        <rect
+          x={pl}
+          y="0"
+          width={iw}
+          height={H}
+          fill="transparent"
+          onPointerMove={fromEvent}
+          onPointerLeave={() => {
+            if (document.activeElement !== svgRef.current) setIdx(-1);
+          }}
+        />
+      </svg>
+      <div className="an-tip" ref={tipRef} hidden={cur < 0} style={{ left: tipX, top: hp?.[1] }}>
+        {cd ? (
+          <>
+            <b>{cd.date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</b>
+            {fmtN(cd.views)} page views · {fmtN(cd.visits)} visits
+          </>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+export function AnalyticsView({ site, showToast }: { site: SiteLite & { name: string }; showToast: (text: string) => void }) {
+  const [days, setDays] = useState<AnDay>(30);
+  const [metric, setMetric] = useState<"views" | "visits">("views");
+  const a = useMemo(() => anCompute(site, days), [site, days]);
+
+  const exportCsv = () => {
+    const rows: (string | number)[][] = [
+      ["Date", "Page views", "Visits"],
+      ...a.ser.map((d) => [d.date.toISOString().slice(0, 10), d.views, d.visits]),
+    ];
+    rows.push([], ["Total visits", a.visits], ["Unique visitors", a.unique]);
+    if (a.shop) rows.push(["Store revenue (NGN)", a.revenue], ["Conversion rate (%)", a.conv]);
+    const csv = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    const el = document.createElement("a");
+    el.href = url;
+    el.download = `${slugify(site.name) || "site"}-analytics-${days}d.csv`;
+    document.body.appendChild(el);
+    el.click();
+    el.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showToast(`Report exported (${TF_LABEL[days].toLowerCase()})`);
+  };
+
+  const kpi = (k: string, c: string, lbl: string, val: string, delta: number | null) => (
+    <div className="ov-card an-kpi" key={lbl}>
+      <span className="an-ki" style={{ "--kc": c } as CSSProperties}>{K_ICONS[k]}</span>
+      <div className="t">
+        <small>{lbl}</small>
+        <div className="v">
+          <strong>{val}</strong>
+          {delta != null ? <span className="an-delta">↑ +{delta}%</span> : null}
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      <div className="ov-head">
+        <h1 tabIndex={-1}>Site &amp; Store Analytics</h1>
+        <p>Track your visitor traffic, conversion rates, and revenue performance.</p>
+      </div>
+
+      <div className="an-bar">
+        <MoreMenu
+          ariaLabel="Timeframe"
+          className="fmenu an-tf-menu"
+          buttonClassName="an-tf"
+          buttonContent={<>{CAL}<span>Timeframe</span><b>{TF_LABEL[days]}</b>{CHEV_D}</>}
+          items={AN_DAYS.map((dd) => ({
+            kind: "item" as const,
+            label: TF_LABEL[dd],
+            checked: dd === days,
+            onSelect: () => setDays(dd),
+          }))}
+        />
+        <button type="button" className="btn-dark an-export" onClick={exportCsv}>
+          {DL}Export Report CSV
+        </button>
+      </div>
+
+      <div className="an-kpis">
+        {kpi("eye", "#4a5aa8", "Total Visits", fmtN(a.visits), a.dl[0])}
+        {kpi("users", "#a07c3c", "Unique Visitors", fmtN(a.unique), a.dl[1])}
+        {kpi("bars", "#2e9a54", "Store Revenue", a.shop ? "₦" + fmtN(a.revenue) : "—", a.shop ? a.dl[2] : null)}
+        {kpi("conv", "#8a3fa8", "Conversion Rate", a.shop ? a.conv.toFixed(1) + "%" : "—", null)}
+      </div>
+
+      <section className="ov-card an-chart" aria-labelledby="an-ct">
+        <header>
+          <h2 id="an-ct">Traffic Overview <span>(Visitor Trend Chart)</span></h2>
+          <MoreMenu
+            ariaLabel="Chart options"
+            className="row-menu fmenu"
+            items={[
+              { kind: "heading", label: "Plot" },
+              { kind: "item", label: "Page views", checked: metric === "views", onSelect: () => setMetric("views") },
+              { kind: "item", label: "Visits", checked: metric === "visits", onSelect: () => setMetric("visits") },
+              { kind: "divider" },
+              { kind: "item", label: "Download CSV", onSelect: exportCsv },
+            ]}
+          />
+        </header>
+        <TrafficChart series={a.ser} metric={metric} days={days} />
+      </section>
+
+      <div className="an-bottom">
+        <section className="ov-card an-list" aria-labelledby="an-pt">
+          <header><h2 id="an-pt">Top Performing Pages</h2></header>
+          <ol>
+            {a.pages.map((p, i) => (
+              <li className="an-row" key={p.id}>
+                <span className="n">{i + 1}.</span>
+                <span className="an-pi" style={{ "--pc": PAGE_TINT[i] } as CSSProperties}>{wIcon(p.ic)}</span>
+                <span className="nm">{p.name === "Home Page" ? "Homepage" : p.name} ('{p.path}')</span>
+                <span className="ct">{fmtN(p.views)}</span>
+                <span className="un">views</span>
+              </li>
+            ))}
+          </ol>
+        </section>
+        <section className="ov-card an-list" aria-labelledby="an-st">
+          <header><h2 id="an-st">Top Selling Products</h2><span className="engine">{I_CHECK_C}Medusa</span></header>
+          {a.sellers.length ? (
+            <ol>
+              {a.sellers.map((p, i) => (
+                <li className="an-row" key={p.name}>
+                  <span className="n">{i + 1}.</span>
+                  <span className="pthumb" style={{ "--tb": p.tint } as CSSProperties} aria-hidden="true">
+                    {p.emoji}
+                    <img src={photoUrl(p.photo)} alt="" loading="lazy" onError={(e) => e.currentTarget.remove()} />
+                  </span>
+                  <span className="nm">{p.name}</span>
+                  <span className="ct">{fmtN(p.sold)}</span>
+                  <span className="un">Sold</span>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="an-empty">This site has no store yet, so there are no sales to show.</p>
+          )}
+        </section>
+      </div>
+    </>
+  );
+}
+
+/* -------------------------------------------------- Site Settings + dialogs */
+
+type SsTab = "domain" | "branding" | "pixels" | "danger";
+
+const DNS_RECORDS = [
+  { type: "A", host: "@", value: "76.76.21.21", title: "A Record - Root Domain" },
+  { type: "CNAME", host: "www", value: "alias.digitalromanian.com", title: "CNAME Record - www Subdomain" },
+];
+const SS_SOON: Record<string, string> = {
+  branding: "Upload your logo and favicon and set the colours visitors see on this site.",
+  pixels: "Add Google Analytics, Meta Pixel and other tracking scripts to this site.",
+  danger: "Unpublish, transfer or permanently delete this site.",
+};
+
+const I_GLOBE_24 = (
+  <svg width="24" height="24" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <circle cx="8" cy="8" r="6.25" stroke="currentColor" strokeWidth="1.3" />
+    <path d="M1.75 8h12.5M8 1.75c1.9 2 1.9 10.5 0 12.5M8 1.75c-1.9 2-1.9 10.5 0 12.5" stroke="currentColor" strokeWidth="1.3" />
+  </svg>
+);
+const I_GLOBE_16 = (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <circle cx="8" cy="8" r="6.25" stroke="currentColor" strokeWidth="1.3" />
+    <path d="M1.75 8h12.5M8 1.75c1.9 2 1.9 10.5 0 12.5M8 1.75c-1.9 2-1.9 10.5 0 12.5" stroke="currentColor" strokeWidth="1.3" />
+  </svg>
+);
+const SS_BRANDING = (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path d="M8 1.75a6.25 6.25 0 1 0 0 12.5c.9 0 1.3-.6 1.3-1.2 0-.8-.6-1-.6-1.8 0-.7.6-1.2 1.3-1.2h1.4A2.85 2.85 0 0 0 14.25 7.2 5.8 5.8 0 0 0 8 1.75Z" stroke="currentColor" strokeWidth="1.3" />
+    <circle cx="5" cy="7" r=".9" fill="currentColor" />
+    <circle cx="7.5" cy="4.6" r=".9" fill="currentColor" />
+    <circle cx="10.6" cy="5.4" r=".9" fill="currentColor" />
+  </svg>
+);
+const SS_PIXELS = (
+  <svg width="17" height="17" viewBox="0 0 17 17" fill="none" aria-hidden="true">
+    <path d="M4.51398 10.3701C4.3196 10.3701 4.16121 10.516 4.16121 10.6951V15.643H1.50462V10.7084C1.50462 10.5293 1.34623 10.3834 1.15184 10.3834C0.95746 10.3834 0.799072 10.5293 0.799072 10.7084V15.9747C0.799072 16.1537 0.95746 16.2997 1.15184 16.2997H4.51398C4.70837 16.2997 4.86676 16.1537 4.86676 15.9747V10.7017C4.86676 10.516 4.70837 10.3701 4.51398 10.3701Z" fill="currentColor" stroke="currentColor" strokeWidth="0.6" />
+    <path d="M9.97846 9.11035C9.78408 9.11035 9.62569 9.25627 9.62569 9.43535V15.6435H6.9763V10.4103C6.9763 10.2313 6.81791 10.0853 6.62352 10.0853C6.42914 10.0853 6.27075 10.2313 6.27075 10.4103V15.9685C6.27075 16.1475 6.42914 16.2934 6.62352 16.2934H9.98566C10.18 16.2934 10.3384 16.1475 10.3384 15.9685V9.43535C10.3384 9.25627 10.18 9.11035 9.97846 9.11035Z" fill="currentColor" stroke="currentColor" strokeWidth="0.6" />
+    <path d="M15.4571 6.10547C15.2627 6.10547 15.1043 6.25139 15.1043 6.43047V15.6431H12.4477V8.36055C12.4477 8.18147 12.2893 8.03555 12.095 8.03555C11.9006 8.03555 11.7422 8.18147 11.7422 8.36055V15.9681C11.7422 16.1472 11.9006 16.2931 12.095 16.2931H15.4571C15.6515 16.2931 15.8099 16.1472 15.8099 15.9681V6.4371C15.8099 6.25139 15.6515 6.10547 15.4571 6.10547Z" fill="currentColor" stroke="currentColor" strokeWidth="0.6" />
+    <path d="M15.9971 0.607115C15.9899 0.487728 15.9107 0.388239 15.8027 0.335179C15.6875 0.282118 15.5507 0.28875 15.4499 0.355076L11.5766 2.72954C11.4686 2.79587 11.411 2.90862 11.4182 3.02138C11.4254 3.14076 11.5046 3.24025 11.6126 3.29331L13.3405 4.08259C11.5046 7.83664 5.52908 9.28918 0.69826 8.73867C0.503875 8.71214 0.323889 8.84479 0.302291 9.02387C0.280692 9.20295 0.417482 9.36877 0.611867 9.38867C1.32461 9.46826 2.05175 9.50805 2.7933 9.50805C7.42974 9.50805 12.2606 7.87643 13.9812 4.36779L15.7883 5.19687C15.8387 5.21677 15.8891 5.23003 15.9467 5.23003C16.0187 5.23003 16.0835 5.21013 16.1411 5.17697C16.249 5.11064 16.3066 4.99789 16.2994 4.88514L15.9971 0.607115ZM13.938 3.62494L12.4909 2.96168L15.3347 1.21731L15.5579 4.36116L13.938 3.62494Z" fill="currentColor" stroke="currentColor" strokeWidth="0.6" />
+  </svg>
+);
+const SS_DANGER = (
+  <svg width="18" height="16" viewBox="0 0 18 16" fill="none" aria-hidden="true">
+    <path d="M0 16L9 0L18 16H0ZM2.29518 14.6286H15.7048L9 2.74286L2.29518 14.6286ZM9.50886 13.3239C9.64784 13.181 9.71733 13.0063 9.71733 12.8C9.71733 12.5937 9.64784 12.419 9.50886 12.2761C9.37002 12.133 9.2004 12.0615 9 12.0615C8.7996 12.0615 8.62998 12.133 8.49114 12.2761C8.35216 12.419 8.28267 12.5937 8.28267 12.8C8.28267 13.0063 8.35216 13.181 8.49114 13.3239C8.62998 13.467 8.7996 13.5385 9 13.5385C9.2004 13.5385 9.37002 13.467 9.50886 13.3239ZM8.33396 11.1472H9.66604V6.57577H8.33396V11.1472Z" fill="currentColor" />
+  </svg>
+);
+const SS_TABS: [SsTab, string, ReactNode][] = [
+  ["domain", "Custom Domain", I_GLOBE_16],
+  ["branding", "Branding & Favicon", SS_BRANDING],
+  ["pixels", "Analytics & Pixels", SS_PIXELS],
+  ["danger", "Danger Zone", SS_DANGER],
+];
+
+const normDomain = (v: string) =>
+  v.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/[/?#].*$/, "").replace(/^www\./, "").replace(/\.$/, "");
+const DOMAIN_RE = /^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$/;
+
+const COPY_IC = (
+  <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <rect x="5.5" y="5.5" width="8" height="8.5" rx="1.2" stroke="currentColor" strokeWidth="1.3" />
+    <path d="M10.5 3.5v-.5a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6.5a1 1 0 0 0 1 1h.5" stroke="currentColor" strokeWidth="1.3" />
+  </svg>
+);
+const REC_IC = (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <rect x="2.25" y="2.25" width="11.5" height="11.5" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
+    <path d="M8 5v5M5.5 7.5 8 10l2.5-2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+const I_OK_CIRCLE = (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-label="Valid domain">
+    <circle cx="8" cy="8" r="7" fill="#22a95b" />
+    <path d="m5 8.2 2 2 4-4.2" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+const I_INFO_18 = (
+  <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.3" />
+    <path d="M8 7.2v4M8 4.9h.01" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+  </svg>
+);
+
+function DomainDialog({
+  prefill,
+  currentDomain,
+  onCancel,
+  onVerify,
+}: {
+  prefill: string;
+  currentDomain: string;
+  onCancel: () => void;
+  onVerify: (domain: string) => void;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const closingRef = useRef(false);
+  const proceedRef = useRef(false);
+  const [value, setValue] = useState(prefill.trim());
+  const [error, setError] = useState("");
+
+  const v = normDomain(value);
+  const ok = DOMAIN_RE.test(v);
+
+  useEffect(() => {
+    const d = ref.current;
+    if (!d) return;
+    if (!d.open) d.showModal();
+    inputRef.current?.focus();
+    inputRef.current?.select();
+    return () => {
+      if (d.open) closingRef.current = true;
+      d.close();
+    };
+  }, []);
+
+  const handleClose = () => {
+    if (closingRef.current) {
+      closingRef.current = false;
+      return;
+    }
+    if (proceedRef.current) {
+      onVerify(normDomain(value));
+      return;
+    }
+    onCancel();
+  };
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    let msg = "";
+    if (!v) msg = "Enter the domain you own, e.g. mybusiness.com.";
+    else if (!DOMAIN_RE.test(v)) msg = `“${value.trim()}” isn't a valid domain. Use something like mybusiness.com.`;
+    else if (v === currentDomain) msg = `${v} is already connected to this site.`;
+    else if (/(^|\.)digitalromanian\.(ro|com)$/.test(v)) msg = "Use a domain you own, not a Digital Romanian address.";
+    setError(msg);
+    if (msg) {
+      inputRef.current?.focus();
+      return;
+    }
+    proceedRef.current = true;
+    ref.current?.close();
+  };
+
+  return (
+    <dialog
+      className="modal modal-domain"
+      ref={ref}
+      aria-labelledby="dm-title"
+      onClose={handleClose}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) ref.current?.close();
+      }}
+    >
+      <form className="dm-in" id="dm-form" noValidate onSubmit={submit}>
+        <div className="dm-head">
+          <span className="dm-ic">{I_GLOBE_24}</span>
+          <div>
+            <h2 id="dm-title">Connect Custom Domain</h2>
+            <p>Enter your existing domain name (e.g; purchased from Namecheap, GoDaddy, or Google Domains).</p>
+          </div>
+          <button type="button" className="icon-btn" aria-label="Close" onClick={() => ref.current?.close()}>
+            {icon("i-close", 18, 18, "0 0 16 16")}
+          </button>
+        </div>
+        <label className="dm-label" htmlFor="dm-input">Domain Name:<span className="req" aria-hidden="true">*</span></label>
+        <div className="dm-field">
+          <input
+            ref={inputRef}
+            id="dm-input"
+            autoComplete="off"
+            spellCheck={false}
+            inputMode="url"
+            placeholder="e.g. mybusiness.com"
+            aria-describedby="dm-err"
+            value={value}
+            aria-invalid={!!error}
+            onChange={(e) => {
+              setValue(e.target.value);
+              setError("");
+            }}
+          />
+          <span className="dm-ok" hidden={!ok}>{I_OK_CIRCLE}</span>
+        </div>
+        <p className="pf-err" id="dm-err" role="alert" hidden={!error}>{error}</p>
+        <div className="dm-foot">
+          <button type="button" className="btn-outline dm-btn" onClick={() => ref.current?.close()}>Cancel</button>
+          <button type="submit" className="btn-primary dm-btn">Verify DNS {icon("i-arrow-right", 14, 14, "0 0 16 16")}</button>
+        </div>
+      </form>
+    </dialog>
+  );
+}
+
+function DnsDialog({
+  domain,
+  onBack,
+  onCancel,
+  onConnected,
+}: {
+  domain: string;
+  onBack: () => void;
+  onCancel: () => void;
+  onConnected: () => void;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const verifyRef = useRef<HTMLButtonElement>(null);
+  const closingRef = useRef(false);
+  const actionRef = useRef<"back" | "connected" | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [status, setStatus] = useState("");
+  const [copied, setCopied] = useState<string | null>(null);
+
+  useEffect(() => {
+    const d = ref.current;
+    if (!d) return;
+    if (!d.open) d.showModal();
+    verifyRef.current?.focus();
+    return () => {
+      if (d.open) closingRef.current = true;
+      d.close();
+    };
+  }, []);
+
+  const handleClose = () => {
+    if (closingRef.current) {
+      closingRef.current = false;
+      return;
+    }
+    if (actionRef.current === "back") {
+      onBack();
+      return;
+    }
+    if (actionRef.current === "connected") {
+      onConnected();
+      return;
+    }
+    onCancel();
+  };
+
+  const fallbackCopy = (text: string) => {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    ref.current?.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand("copy");
+    } catch {
+      /* ignore */
+    }
+    ta.remove();
+  };
+  const copy = (text: string, key: string) => {
+    const done = () => {
+      setCopied(key);
+      window.setTimeout(() => setCopied(null), 1600);
+    };
+    if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(done, () => { fallbackCopy(text); done(); });
+    else { fallbackCopy(text); done(); }
+  };
+
+  const verify = () => {
+    if (checking) return;
+    setChecking(true);
+    setStatus(`Looking up the A and CNAME records for ${domain}…`);
+    window.setTimeout(() => {
+      if (!ref.current?.open) return;
+      actionRef.current = "connected";
+      ref.current?.close();
+    }, 1400);
+  };
+
+  const lines = DNS_RECORDS.map((r) => `Type: ${r.type} | Host: ${r.host} | Value: ${r.value}`).join("\n");
+  const allText = `DNS records for ${domain}\n${lines}`;
+  const copyLabel = (key: string, label: string) =>
+    copied === key ? <>{TICK}Copied</> : <>{COPY_IC}{label}</>;
+
+  return (
+    <dialog
+      className="modal modal-domain"
+      ref={ref}
+      aria-labelledby="dns-title"
+      onClose={handleClose}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) ref.current?.close();
+      }}
+    >
+      <div className="dm-in">
+        <div className="dm-head">
+          <span className="dm-ic">{I_GLOBE_24}</span>
+          <div>
+            <h2 id="dns-title">DNS Verification &amp; Record Instructions</h2>
+            <p>Once you enter your domain, the system instantly generates the required DNS records and displays them in a clear, copy-and-paste format.</p>
+          </div>
+          <button type="button" className="icon-btn" aria-label="Close" onClick={() => ref.current?.close()}>
+            {icon("i-close", 18, 18, "0 0 16 16")}
+          </button>
+        </div>
+        <div className="dns-box">
+          <div className="dns-cfg">
+            {I_INFO_18}
+            <span>DNS Configuration for:</span><b>{domain}</b>
+            <button type="button" className={`dns-copy${copied === "all" ? " done" : ""}`} onClick={() => copy(allText, "all")}>
+              {copyLabel("all", "Copy All")}
+            </button>
+          </div>
+          <div>
+            {DNS_RECORDS.map((r, i) => (
+              <div className={`dns-rec${i ? " alt" : ""}`} key={r.type}>
+                <p className="dns-rt">{REC_IC}Record {i + 1} ( {r.title} )</p>
+                {i ? null : <hr />}
+                <div className="dns-row">
+                  <div className="dc"><span>Type:</span><b className={r.type === "A" ? "tp" : undefined}>{r.type}</b></div>
+                  <i className="sep" />
+                  <div className="dc"><span>Host:</span><b>{r.host}</b></div>
+                  <i className="sep" />
+                  <div className="dc v"><span>Value:</span><b>{r.value}</b></div>
+                  <button type="button" className={`dns-copy${copied === String(i) ? " done" : ""}`} aria-label={`Copy record ${i + 1}`} onClick={() => copy(r.value, String(i))}>
+                    {copyLabel(String(i), "Copy")}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <p className="dns-status" role="status" hidden={!status}>{status}</p>
+        <div className="dm-foot">
+          <button
+            type="button"
+            className="btn-outline dm-btn"
+            onClick={() => {
+              actionRef.current = "back";
+              ref.current?.close();
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true" style={{ transform: "scaleX(-1)" }}>
+              <use href="#i-arrow-right" />
+            </svg>
+            Back
+          </button>
+          <button ref={verifyRef} type="button" className="btn-primary dm-btn wide" disabled={checking} onClick={verify}>
+            {checking ? <><span className="dm-spin" aria-hidden="true" />Checking DNS…</> : "Verify Connection"}
+          </button>
+        </div>
+      </div>
+    </dialog>
+  );
+}
+
+type DomainDialogState = { t: "domain"; prefill: string } | { t: "dns"; domain: string } | null;
+
+export function SettingsView({
+  site,
+  d,
+  onConnect,
+  showToast,
+}: {
+  site: SiteLite & { name: string };
+  d: { domain: string; live: boolean };
+  onConnect: (domain: string) => void;
+  showToast: (text: string) => void;
+}) {
+  const [tab, setTab] = useState<SsTab>("domain");
+  const [draft, setDraft] = useState("");
+  const [dlg, setDlg] = useState<DomainDialogState>(null);
+  const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+
+  const focusTab = (k: SsTab) => tabRefs.current[k]?.focus();
+  const openDomain = (prefill: string) => setDlg({ t: "domain", prefill });
+
+  const onTabKey = (e: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+    e.preventDefault();
+    const i = SS_TABS.findIndex((t) => t[0] === tab);
+    const next = SS_TABS[(i + (e.key === "ArrowRight" ? 1 : SS_TABS.length - 1)) % SS_TABS.length][0];
+    setTab(next);
+    requestAnimationFrame(() => focusTab(next));
+  };
+
+  const panel =
+    tab === "domain" ? (
+      <>
+        <h2 className="ss-h">Custom Domain Configuration</h2>
+        <p className="ss-cur">
+          Current Domain: <b>{d.domain}</b>
+          <span className={`st${d.live ? "" : " off"}`}>({d.live ? "Active" : "Not live"})</span>
+          <span className="dot" aria-hidden="true" />
+        </p>
+        <label className="ss-lbl" htmlFor="ss-domain">Add Custom Domain:</label>
+        <div className="ss-add">
+          <input
+            id="ss-domain"
+            autoComplete="off"
+            spellCheck={false}
+            inputMode="url"
+            placeholder="e.g. mybusiness.com"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                openDomain(draft);
+              }
+            }}
+          />
+          <button type="button" className="btn-dark" onClick={() => openDomain(draft)}>Connect Domain</button>
+        </div>
+        <hr />
+        <h2 className="ss-h">DNS Records to Point:</h2>
+        <ul className="ss-dns">
+          {DNS_RECORDS.map((r) => (
+            <li key={r.type}>
+              <span>Type:</span>{r.type}<i /><span>Host:</span>{r.host}<i /><span>Value:</span>{r.value}
+            </li>
+          ))}
+        </ul>
+      </>
+    ) : (
+      <div className="ss-soon">
+        <span className="soon-tag">Coming soon</span>
+        <h3 style={{ marginTop: 14 }}>{SS_TABS.find((t) => t[0] === tab)?.[1]}</h3>
+        <p>{SS_SOON[tab]}</p>
+      </div>
+    );
+
+  return (
+    <>
+      <div className="ov-head">
+        <h1 tabIndex={-1}>Site Settings</h1>
+        <p>Manage global domain connections, brand identity, tracking scripts, and site deletion.</p>
+      </div>
+
+      <div className="ov-card ss-tabs" role="tablist" aria-label="Site settings sections">
+        {SS_TABS.map(([k, label, ic]) => (
+          <button
+            key={k}
+            type="button"
+            className="ss-tab"
+            role="tab"
+            id={`ss-tab-${k}`}
+            aria-selected={k === tab}
+            aria-controls="ss-panel"
+            tabIndex={k === tab ? 0 : -1}
+            ref={(el) => {
+              tabRefs.current[k] = el;
+            }}
+            onClick={() => {
+              setTab(k);
+              focusTab(k);
+            }}
+            onKeyDown={onTabKey}
+          >
+            {ic}
+            {label}
+          </button>
+        ))}
+      </div>
+      <section className="ov-card ss-panel" id="ss-panel" role="tabpanel" aria-labelledby={`ss-tab-${tab}`}>
+        {panel}
+      </section>
+
+      {dlg?.t === "domain" ? (
+        <DomainDialog
+          key={dlg.prefill}
+          prefill={dlg.prefill}
+          currentDomain={d.domain}
+          onCancel={() => setDlg(null)}
+          onVerify={(domain) => setDlg({ t: "dns", domain })}
+        />
+      ) : null}
+      {dlg?.t === "dns" ? (
+        <DnsDialog
+          key={dlg.domain}
+          domain={dlg.domain}
+          onBack={() => setDlg({ t: "domain", prefill: dlg.domain })}
+          onCancel={() => setDlg(null)}
+          onConnected={() => {
+            const connected = dlg.domain;
+            onConnect(connected);
+            setDlg(null);
+            showToast(`${connected} is connected to ${site.name}`);
+          }}
+        />
+      ) : null}
+    </>
   );
 }

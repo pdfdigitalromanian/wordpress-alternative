@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useActionData, useLocation, useNavigate, useRouteLoaderData } from "react-router";
 import { AccountMenu } from "~/components/account-menu";
 import {
+  AnalyticsView,
   CategoriesView,
   CheckoutView,
   generateCategories,
@@ -11,6 +12,7 @@ import {
   generateProducts,
   OrdersView,
   ProductsView,
+  SettingsView,
   WebsitePagesView,
   type Category,
   type Checkout,
@@ -77,6 +79,15 @@ const MEDIA_ICON = (
     <use href="#i-media" />
   </svg>
 );
+/* Sidebar Analytics row glyph (prototype #/overview/analytics link). */
+const ANALYTICS_ICON = (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path d="M2 14.25h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    <rect x="2.75" y="8.5" width="2.5" height="5.75" rx=".5" stroke="currentColor" strokeWidth="1.3" />
+    <rect x="6.75" y="5.25" width="2.5" height="9" rx=".5" stroke="currentColor" strokeWidth="1.3" />
+    <rect x="10.75" y="2" width="2.5" height="12.25" rx=".5" stroke="currentColor" strokeWidth="1.3" />
+  </svg>
+);
 /* The four store sub-item glyphs (prototype sidebar, #store-sub). */
 const CART_13 = (
   <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -107,7 +118,7 @@ const GEAR_13 = (
 
 /* SITE_VIEW_TITLES from render(): the per-view document titles and the
    sidebar labels the "coming soon" toast echoes. */
-const SITE_VIEW_TITLES: Record<string, string> = { overview: "Overview", pages: "Website Pages", products: "Products", orders: "Orders", categories: "Categories", checkout: "Checkout Settings" };
+const SITE_VIEW_TITLES: Record<string, string> = { overview: "Overview", pages: "Website Pages", products: "Products", orders: "Orders", categories: "Categories", checkout: "Checkout Settings", analytics: "Analytics", settings: "Site Settings" };
 const NAV_LABELS: Record<string, string> = {
   cms: "Content/CMS",
   media: "Media Library",
@@ -413,6 +424,8 @@ export default function Overview() {
   const [ordersBySite, setOrdersBySite] = useState<Record<string, Order[]>>({});
   const [categoriesBySite, setCategoriesBySite] = useState<Record<string, Category[]>>({});
   const [checkoutBySite, setCheckoutBySite] = useState<Record<string, Checkout>>({});
+  // Domain connected from Site Settings, per site, so the topbar reflects it.
+  const [domainBySite, setDomainBySite] = useState<Record<string, string>>({});
 
   // state.currentId in the standalone file, shared with the workspace and admin screens.
   useEffect(() => {
@@ -428,7 +441,7 @@ export default function Overview() {
   const activeWorkspace = data.workspaces.find((w) => w.id === activeWorkspaceId) ?? data.workspaces[0];
   const SITES = activeWorkspace?.sites ?? [];
   const activeSite = SITES.find((s) => s.id === activeSiteId);
-  const dashboard = useMemo(() => (activeSite ? siteData(activeSite) : null), [activeSite]);
+  const dashboard = useMemo(() => (activeSite ? siteData({ ...activeSite, domain: domainBySite[activeSite.id] }) : null), [activeSite, domainBySite]);
 
   const sitePages: WebPage[] = useMemo(
     () => (activeSite ? (pagesBySite[activeSite.id] ?? generatePages(activeSite)) : []),
@@ -474,6 +487,11 @@ export default function Overview() {
     if (!activeSite) return;
     const site = activeSite;
     setCheckoutBySite((m) => ({ ...m, [site.id]: updater(m[site.id] ?? generateCheckout(site)) }));
+  };
+  const setSiteDomain = (domain: string) => {
+    if (!activeSite) return;
+    const site = activeSite;
+    setDomainBySite((m) => ({ ...m, [site.id]: domain }));
   };
 
   const sidebarRef = useRef<HTMLElement>(null);
@@ -684,7 +702,7 @@ export default function Overview() {
                 onClick={() => setStoreOpen((o) => !o)}
               >
                 {icon("i-store")}
-                E-Commerce / Store
+                Store
                 {icon("i-chevron-down", 14, 14, "0 0 16 16", "chev")}
               </button>
               <ul className="store-sub" id="store-sub" hidden={!storeOpen}>
@@ -715,6 +733,12 @@ export default function Overview() {
               </ul>
             </li>
             <li>
+              <Link className="nav-link" to="/overview/analytics" data-site-nav="analytics" aria-current={siteView === "analytics" ? "page" : undefined} onClick={() => closeMenu()}>
+                {ANALYTICS_ICON}
+                Analytics
+              </Link>
+            </li>
+            <li>
               <a className="nav-link" href="/overview" data-site-nav="cms" onClick={inertNav("cms")}>
                 {CMS_ICON}
                 Content/CMS
@@ -733,10 +757,10 @@ export default function Overview() {
               </a>
             </li>
             <li>
-              <a className="nav-link" href="/overview" data-site-nav="settings" onClick={inertNav("settings")}>
+              <Link className="nav-link" to="/overview/settings" data-site-nav="settings" aria-current={siteView === "settings" ? "page" : undefined} onClick={() => closeMenu()}>
                 {icon("i-settings")}
                 Site Settings
-              </a>
+              </Link>
             </li>
           </ul>
 
@@ -816,6 +840,10 @@ export default function Overview() {
                 <NoSiteView title="Website Pages" sub="Manage your page tree, SEO titles, subpaths, and publishing status." hasWorkspace={!!activeWorkspace} />
             ) : siteView === "products" || siteView === "orders" || siteView === "categories" || siteView === "checkout" ? (
               <NoSiteView title="E-Commerce / Store" sub="Manage your products, inventory, order lists, and payment channel toggles." hasWorkspace={!!activeWorkspace} />
+            ) : siteView === "analytics" ? (
+              <NoSiteView title="Site & Store Analytics" sub="Track your visitor traffic, conversion rates, and revenue performance." hasWorkspace={!!activeWorkspace} />
+            ) : siteView === "settings" ? (
+              <NoSiteView title="Site Settings" sub="Manage global domain connections, brand identity, tracking scripts, and site deletion." hasWorkspace={!!activeWorkspace} />
               ) : (
                 <>
                   <div className="ov-head">
@@ -850,6 +878,7 @@ export default function Overview() {
               <ProductsView
                 key={activeSite.id}
                 site={activeSite}
+                d={dashboard}
                 products={siteProducts}
                 setProducts={setSiteProducts}
                 showToast={showToast}
@@ -884,6 +913,16 @@ export default function Overview() {
                 setCheckout={setSiteCheckout}
                 showToast={showToast}
                 showToastAction={showToastAction}
+              />
+            ) : siteView === "analytics" ? (
+              <AnalyticsView key={activeSite.id} site={activeSite} showToast={showToast} />
+            ) : siteView === "settings" ? (
+              <SettingsView
+                key={activeSite.id}
+                site={activeSite}
+                d={dashboard}
+                onConnect={setSiteDomain}
+                showToast={showToast}
               />
             ) : (
               <SiteOverview d={dashboard} showToast={showToast} navToast={navToast} />
