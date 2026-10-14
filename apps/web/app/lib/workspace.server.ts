@@ -123,6 +123,17 @@ export async function loadWorkspaceScreen(request: Request): Promise<WorkspaceSc
 
   if (!user) throw new Response(null, { status: 302, headers: { Location: "/login" } });
 
+  // The profile step always precedes the workspace shell (landing.ts's order:
+  // profile -> workspace -> /workspace). Without this, an account that already
+  // has a workspace but no display_name (an accepted invite, or a workspace
+  // created after skipping the profile step) rendered the shell directly and
+  // never saw the profile screen. Enforcing it here means every entry point
+  // into the workspace area - deep links, the shell, /overview - lands on the
+  // profile step first.
+  if (!String(user.user_metadata?.display_name ?? "")) {
+    throw new Response(null, { status: 302, headers: { Location: ONBOARDING_PROFILE } });
+  }
+
   const { data: memberships } = await supabase
     .from("workspace_memberships")
     .select("workspace_id, role, workspaces(id, name, slug, created_at)")

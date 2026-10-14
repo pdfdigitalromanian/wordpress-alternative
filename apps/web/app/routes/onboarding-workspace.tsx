@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { Form, redirect, useActionData, useNavigation } from "react-router";
+import { hasWorkspace } from "~/lib/landing";
 import { slugify } from "~/lib/slugify";
 import { createSupabaseServerClient } from "~/lib/supabase.server";
 import type { Route } from "./+types/onboarding-workspace";
@@ -28,6 +29,13 @@ export async function loader({ request }: Route.LoaderArgs) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) throw redirect("/login");
+  // Profile always precedes workspace: a user who reaches this screen without a
+  // display_name is sent back to the profile step first.
+  if (!String(user.user_metadata?.display_name ?? "")) throw redirect("/onboarding/profile");
+  // And, symmetrically, a step is skipped when it is already satisfied: if the
+  // account already has a workspace there is nothing to set up here, so land
+  // straight in the workspace instead of showing the creation form again.
+  if (await hasWorkspace(request, user)) throw redirect("/workspace");
   return null;
 }
 
@@ -86,7 +94,6 @@ export default function OnboardingWorkspace() {
     <main className="auth-page">
       <div className="auth-card">
         <div className="auth-inner onb">
-          <p className="onb-step">Step 2 of 2</p>
           <h1 tabIndex={-1}>Create your workspace</h1>
           <p className="auth-lead">Where your sites and team live.</p>
 

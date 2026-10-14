@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { Form, redirect, useActionData, useLoaderData, useNavigate, useNavigation } from "react-router";
+import { hasWorkspace } from "~/lib/landing";
 import { createSupabaseServerClient } from "~/lib/supabase.server";
 import type { Route } from "./+types/onboarding-profile";
 
@@ -40,12 +41,24 @@ export async function loader({ request }: Route.LoaderArgs) {
      greeting read, so the form starts out showing what the rest of the app
      already displays. */
   const meta = user.user_metadata ?? {};
+  const name = String(meta.display_name ?? "");
+  const returnTo = safeReturnTo(new URL(request.url).searchParams.get("returnTo"));
+
+  /* A step is skipped when it is already satisfied: landingFor() already skips
+     an existing profile at the entry decision, so opening this screen directly
+     with a name set skips ahead too - to the workspace step if that is still
+     missing, otherwise all the way into the workspace. Editing (?returnTo=,
+     from the account menu's "Edit profile") is exempt so the form still opens. */
+  if (name && !returnTo) {
+    throw redirect((await hasWorkspace(request, user)) ? "/workspace" : "/onboarding/workspace");
+  }
+
   return {
     email: user.email ?? "",
-    name: String(meta.display_name ?? ""),
+    name,
     username: String(meta.username ?? ""),
     photo: String(meta.avatar_url ?? ""),
-    returnTo: safeReturnTo(new URL(request.url).searchParams.get("returnTo")),
+    returnTo,
   };
 }
 
@@ -198,13 +211,16 @@ export default function OnboardingProfile() {
             <button type="submit" disabled={submitting} className="btn-primary auth-submit">{editing ? "Save changes" : "Continue"}</button>
           </Form>
 
-          {/* Same element and classes as the standalone file: a type="button"
-              outside the form, so skipping submits nothing. In onboarding it
-              advances to step 2; when editing it returns to where the user
-              came from. */}
-          <button type="button" className="btn-text onb-skip" onClick={() => navigate(returnTo ?? "/onboarding/workspace")}>
-            Skip for now
-          </button>
+          {/* Skipping is an edit-only escape hatch: during sign-up onboarding
+              the profile step always precedes the workspace step, so there is
+              nothing to skip past (and skipping would only bounce back here
+              from /onboarding/workspace). When editing, it cancels back to
+              wherever the user came from. */}
+          {editing ? (
+            <button type="button" className="btn-text onb-skip" onClick={() => navigate(returnTo ?? "/workspace")}>
+              Cancel
+            </button>
+          ) : null}
         </div>
       </div>
     </main>

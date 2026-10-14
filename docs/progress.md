@@ -1,8 +1,10 @@
 # Progress
 
-Last updated: 2026-10-08, end of the session that ported the prototype's
-E-Commerce/Store screens (Products, Website Pages, both dialogs) into the
-CMS overview. Earlier: 2026-09-21 guest checkout + real-browser
+Last updated: 2026-10-14, end of the session that ported the prototype's
+Site & Store Analytics and Site Settings screens (plus the sidebar's Store
+label, Analytics row and Site Settings link) into the CMS overview.
+Earlier: 2026-10-08, E-Commerce/Store screens (Products, Website Pages,
+both dialogs). Before that: 2026-09-21 guest checkout + real-browser
 verification (on top of the
 storefront/cart commit `14b79f4`, the security-fix commit `1761598`, and
 the pre-existing `b5ded70`). This file is the current source of truth for
@@ -467,3 +469,100 @@ action right-aligned everywhere below 1200px.
 **Security note:** a GitHub PAT was exposed in this session's transcript and
 used once for a push; it must be **revoked/rotated**. It was never written to
 any committed file.
+
+## Products: archived status + menu parity, SEO dialog port - 13 October 2026
+
+Ported the prototype's product **SEO** feature and brought the product
+three-dot menu to full parity. Presentation only; no migrations, no hosted
+writes, nothing deployed. The categories image upload (below) was already in
+the working tree; this session verified it and completed the remaining two
+gaps.
+
+- **Product menu parity** (`overview-screens.tsx`): row menu is now
+  `Edit / Duplicate / [Publish when draft] / Archive|Restore / � / Delete
+  product`, matching `digital-romanian-screen.html` (lines ~4943-4952).
+  Replaced `toggleStatus` with `publish()` and `toggleArchive()`; split the
+  `out` filter to `status === "published"` and added `archived` to `FILTERS`
+  + `statusPill` (`Product.status` widened to include `"archived"`). Added
+  `.spill2.archived` to `overview.css`; filter expression now mirrors the
+  prototype's `prodList()` one-for-one.
+- **Product SEO** (`overview-screens.tsx`, `overview.css`, `overview.tsx`):
+  ported the `pf-seo` summary card inside the product dialog plus the
+  separate `modal-seo` "Search engine listing" dialog � title/meta/slug with
+  per-field auto-generation (`seoSlug`/`seoTwo`/`seoCut`, `SEO_T=60`,
+  `SEO_D=160`), live Google preview, character meters, "Show on search
+  engines" switch, snapshot-restore on cancel and "Reset to auto-generated".
+  `ProductDialog` now takes `siteName`/`domain`/`showToast`; `ProductsView`
+  takes `d` and `overview.tsx` passes `d={dashboard}`. New `ProductSeo` type;
+  `Product.seo?` + `ProductDraft.seo` persist overrides with the
+  prototype's `seoAuto` flags. CSS ported verbatim from the prototype
+  (lines ~1695-1753).
+- **Categories image upload** (pre-existing working diff): `Category.img`,
+  `generateCategories` seed, row thumb fallback `c.img || photoUrl(photo)`,
+  and the `CategoryDialog` drag/drop upload bar.
+
+Verification: `pnpm --filter @digital-romanian/web typecheck` clean and
+`pnpm --filter @digital-romanian/web build` clean. Prototype semantics for
+the menu, filter, archive/publish toasts, `statusPill` and the SEO
+auto/override logic were diffed line-for-line against
+`digital-romanian-screen.html`. No existing e2e spec touches the overview
+product dialog/menu.
+
+## Analytics + Site Settings port, sidebar reorg - 14 October 2026
+
+Ported the prototype's **Site & Store Analytics** and **Site Settings**
+views into the CMS overview, and brought the sidebar into line with
+`digital-romanian-screen.html`. Presentation only; no migrations, no
+hosted writes, nothing deployed.
+
+- **Sidebar** (`overview.tsx`): renamed the group label "E-Commerce /
+  Store" to **Store** (prototype line 3535); added an **Analytics** row
+  (`/overview/analytics`, prototype line 3543) between the Store group and
+  Content/CMS with its own inline bar-chart glyph (`ANALYTICS_ICON`); and
+  turned the previously inert **Site Settings** row into a real `Link`
+  to `/overview/settings`. `SITE_VIEW_TITLES` gained `analytics` and
+  `settings` so `document.title` and route matching resolve them.
+- **Analytics** (`overview-screens.tsx`): exported `AnalyticsView` - KPI
+  cards, an SVG `TrafficChart` (port of the prototype's imperative
+  `drawChart()`, rendered client-side only so SSR stays deterministic),
+  timeframe MoreMenu, top pages / top sellers lists, and a CSV export.
+  Ported helpers `anSeries` / `anCompute` and the deterministic demo
+  series.
+- **Site Settings** (`overview-screens.tsx`): exported `SettingsView` with
+  the prototype's tab set, plus the `DomainDialog` -> `DnsDialog` custom
+  domain flow (`normDomain`, `DOMAIN_RE`, record table). `overview.tsx`
+  holds a per-site `domainBySite` override fed through `siteData`, so the
+  topbar `ov-domain` and the settings panel update when a domain is
+  connected - nothing is written to Medusa or Supabase.
+- **CSS** (`overview.css`): appended the `.an-*` / `.ss-*` / `.dm-*` /
+  `.dns-*` / `.modal-domain` block and `.soon-tag`, verbatim from the
+  prototype.
+- **Onboarding order** (work order same session): removed the "Step 2 of 2"
+  label from `/onboarding/workspace`, and made the profile step always
+  precede the workspace step. `loadWorkspaceScreen` (`workspace.server.ts`)
+  and the `/onboarding/workspace` loader now redirect an account with no
+  `display_name` to `/onboarding/profile`, so an account that already has a
+  workspace (an accepted invite, or one created after skipping the profile
+  step) no longer renders the shell directly. The profile page's "Skip for
+  now" is now an edit-only "Cancel"; during sign-up onboarding the profile
+  step is mandatory, so there is nothing to skip past.
+- **Skip a step that is already satisfied**: onboarding is now symmetric -
+  the entry decision (`landingFor`) already skipped an existing profile, and
+  now a directly-opened `/onboarding/workspace` redirects to `/workspace`
+  when the account already has a membership (`onboarding-workspace.tsx`),
+  and a directly-opened `/onboarding/profile` skips ahead to
+  `/onboarding/workspace` (or `/workspace`) when a `display_name` is set.
+  Editing (`?returnTo=`, from the account menu) is exempt so "Edit profile"
+  still opens the form.
+
+Verification: `pnpm --filter @digital-romanian/web typecheck` clean and
+`pnpm --filter @digital-romanian/web build` clean. Browser-verified via
+Playwright against the local `e2e/support/feature-server.mjs` fixture (no
+hosted services): three temporary specs confirmed the Store group +
+Analytics + Site Settings sidebar links, the Analytics heading/chart, and
+the Settings heading + domain panel; the temp spec/config were removed
+after the run, so no new committed e2e coverage exists (consistent with
+the overview screens above). A second temporary probe (fixture user with
+no `display_name`) confirmed login lands on `/onboarding/profile`, and both
+`/onboarding/workspace` and `/workspace` redirect there; the fixture edit
+and temp files were reverted after the run.
