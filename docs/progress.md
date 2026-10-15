@@ -1,6 +1,18 @@
 # Progress
 
-Last updated: 2026-10-15, the session that (a) ported three further
+Last updated: 2026-10-15, the session that ported three more prototype
+surfaces from `wp.html` one-for-one: the **Content** view (article
+management table + add/edit article dialog + a rich-text Content Body
+editor + article SEO sub-dialog), the Site Settings **Danger Zone** tab
+(unpublish / transfer / delete panels + confirmation dialog), and a
+rebuilt **Analytics & Pixels** panel (per-tool catalog rows with an
+Active/Paused chip, "On" switch, Copy ID + remove, an in-list "Add
+tracking tool" row opening a searchable grouped picker, dirty-state
+note/`Discard`/`Save Tracking Configuration` bar, and the
+`PX_CODE_ON = false` custom Header Code row hidden exactly as in the
+prototype). Content data, danger actions and pixels stay client-side,
+per-site state mirroring the prototype — no schema change.
+Before that, same day, the session that (a) ported three further
 prototype changes from the design HTML one-for-one: the Site Settings
 **Custom Domain** tab's pending domain + live DNS verification dialog, the
 add/edit **product dialog** slide-in/out animation, and the **Create a new
@@ -798,3 +810,58 @@ they are not user-visible and the file rename is noted here instead.
 Verification: `pnpm --filter @digital-romanian/web typecheck` clean and
 production build clean (root CSS emitted at 138.24 kB, up from 136.73 kB).
 No DB migration; no hosted Supabase writes.
+
+### Content view, Danger Zone and the rebuilt Analytics & Pixels panel - 15 October 2026
+
+Three more `wp.html` surfaces ported one-for-one. All three stay
+client-side, per-site state mirroring the prototype — no schema change, no
+hosted writes.
+
+- **Content** (`overview-screens.tsx`, `overview.tsx`, `overview.css`):
+  new `ContentView` + `ArticleDialog` + `ArticleBodyDialog` +
+  `ArticleSeoCard`/`ArticleSeoDialog`. The list is the prototype's
+  `.acard`/`.arow` table (cover thumb, title/slug/snippet, author, date,
+  status pill, per-row `MoreMenu` with view-live/unpublish/duplicate/
+  delete) with search, a status filter and a `Pager`. The dialog carries
+  the cover drop-box, title/slug (auto from title), author `AUTHOR_ROLES`,
+  status, the `.ab-card` Content Body summary opening a
+  `contentEditable` editor (`.ae-bar` toolbar: block style, B/I/U, lists,
+  blockquote, link, image, clear formatting; live word count + excerpt
+  auto-fill), and an "Edit SEO" sub-dialog (`.sx-*` accordion +
+  `.ar-og` Google preview). New types `Article`/`ArticleSeo`,
+  `generateArticles` seed (two prototype articles), and the `fmtDate`/
+  `fmtTime`/`timeAgo` helpers. `overview.tsx` gained
+  `articlesBySite`/`unpublishedBySite`/`removedSiteIds`, turned the inert
+  `cms` nav into a real `/overview/content` link, and routes
+  `SITE_VIEW_TITLES.content = "Content"`.
+- **Danger Zone** (`overview-screens.tsx`, `overview.css`, `overview.tsx`):
+  the `danger` tab no longer shows a placeholder — it renders the
+  prototype's three `.sdz-card`s (unpublish, transfer ownership, delete
+  site) plus `SiteDangerDialog` confirmations. Unpublish flips the site's
+  status, transfer/delete mark the site removed and return to
+  `/workspace`, and "create a workspace" reuses the existing wizard.
+  `SS_SOON` is now unused.
+- **Analytics & Pixels** (`overview-screens.tsx`, `overview.css`): the
+  panel was rebuilt to the prototype's catalog model — a `PX_TOOLS`
+  catalog (GA, Meta, TikTok, Google Ads, Snapchat, Pinterest, LinkedIn,
+  X, GTM, Clarity, Hotjar, Search Console; grouped with brand marks) and a
+  `pxDraftOf()` draft with unsaved-changes tracking. Each row is
+  `.px-ic`/`.px-head` + Active/Paused chip/`.px-id` labelled input/
+  `.px-acts` ("On" switch, Copy ID, remove). An in-list `.px-addrow`
+  "Add tracking tool" opens the searchable, grouped `.pxa-*` picker
+  (already-added tools disabled). A `.px-bar` carries the note,
+  `Discard` and `Save Tracking Configuration`. `PX_CODE_ON = false` keeps
+  the custom Header Code row hidden exactly as in the prototype;
+  `generatePixels` seeds the flat `vals`/`on` shape.
+
+Verification: `pnpm --filter @digital-romanian/web typecheck` clean and
+`pnpm --filter @digital-romanian/web build` clean. Browser-verified via
+Playwright against the local `e2e/support/feature-server.mjs` fixture (no
+hosted services): a temporary spec signed in and confirmed the Content
+list (5 header cols, 3 rows after adding an article, dialog + body editor
+save), the Danger Zone (three cards + confirm dialog), and the Pixels
+panel (ga/fb rows with switches + remove, the 12-tool/5-group picker,
+add → 4 rows, switch toggle, remove → 3 rows, dirty note). Zero
+console/page errors. The temp scripts/screenshots were removed after the
+run, so no new committed e2e coverage exists (consistent with the rest of
+the overview screens).

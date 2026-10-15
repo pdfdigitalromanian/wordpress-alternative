@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Link } from "react-router";
 import { slugify } from "~/lib/slugify";
+import { timeAgo } from "~/lib/workspace-view";
 
 /* Pages (#/overview/pages) and E-Commerce / Store → Products
    (#/overview/products), the two site screens digital-romanian-screen.html
@@ -63,6 +64,36 @@ export type WebPage = {
   tpl: string;
   status: "published" | "draft";
   ic: string;
+};
+
+export type ArticleSeo = {
+  title: string;
+  meta: string;
+  slug: string;
+  index: boolean;
+  auto: { title: boolean; meta: boolean };
+  ogUse: boolean;
+  og: string | null;
+};
+
+export type Article = {
+  id: string;
+  title: string;
+  slug: string;
+  author: string;
+  status: "published" | "draft";
+  date: number;
+  emoji: string;
+  tint: string;
+  photo: string | null;
+  img: string | null;
+  excerpt: string;
+  excerptCustom?: boolean;
+  body?: string;
+  /* Sanitised HTML snippet of body, computed in the browser on save so the
+     list row renders real formatting without touching document on SSR. */
+  bodySnip?: string;
+  seo?: ArticleSeo;
 };
 
 export type Product = {
@@ -246,6 +277,39 @@ export function generatePages(site: SiteLite): WebPage[] {
 }
 
 const PAGE_TPLS = ["Default Landing", "E-Commerce Grid", "Standard Content", "Contact Form Layout", "Blog Index", "Blank Canvas"];
+
+/* Author = the site role the article is posted under (shop manager left out). */
+const AUTHOR_ROLES = ["Admin", "Editor", "Content"];
+
+const fmtDate = (t: number) => new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+const fmtTime = (t: number) => new Date(t).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+
+/* articlesOf(s): farm sites open with two seeded posts, every other site with
+   a single welcome article — same seeds as articlesOf() in wp.html. */
+export function generateArticles(site: SiteLite & { name: string; updated?: string }): Article[] {
+  const shop = isShopSite(site);
+  const seed: [string, string, string, number, string, string, string | null][] = shop
+    ? [
+        ["5 Tips for Raising Healthy Broilers", "5-tips-raising-broilers", "Practical tips to keep your broilers healthy, improve growth, and boost productivity.", new Date(2026, 9, 14, 10, 24).getTime(), "🐔", "#f6e3de", "1548550023-2bdb3c5beed7"],
+        ["Why We Use Bitter Leaf for Poultry", "bitter-leaf-poultry", "Learn how bitter leaf helps improve digestion, boost, and promote better poultry health.", new Date(2026, 9, 5, 12, 49).getTime(), "🌿", "#e6f0de", "1500382017468-9049fed747ef"],
+      ]
+    : [
+        [`Welcome to ${site.name}`, "welcome", "A short introduction to who we are, what we do and how we can help.", new Date(site.updated || Date.now()).getTime() || Date.now(), "👋", "#dfe8f7", null],
+      ];
+  return seed.map(([title, slug, excerpt, date, emoji, tint, photo], i) => ({
+    id: `${site.id}a${i}`,
+    title,
+    slug,
+    excerpt,
+    author: "Admin",
+    status: "published" as const,
+    date,
+    emoji,
+    tint,
+    photo,
+    img: null,
+  }));
+}
 
 function wIcon(k: string) {
   if (k === "shop") return icon("i-store", 13, 13, "0 0 16 16");
@@ -1548,6 +1612,1213 @@ function PageDialog({
           <button type="submit" className="btn-primary pf-btn">Add Page</button>
         </div>
       </form>
+    </dialog>
+  );
+}
+
+/* =================================================================
+   Content (#/overview/content): article list + add / edit dialog with the
+   Content Body rich-text editor and its own SEO sub-dialog — from
+   renderContentView() / paintArticles() / openArticle() in wp.html.
+   ================================================================= */
+
+const ART_STATUS: Record<string, string> = { published: "Published", draft: "Draft" };
+type ArtFilter = "all" | "published" | "draft";
+
+const ART_FILTER_ICON = (
+  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+    <path d="M2.5 5h13M5 9h8M7.5 13h3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+  </svg>
+);
+const I_DOC_16 = (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path d="M4 2.5h5.5L12.5 5.5v8H4z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+    <path d="M6 8h4.5M6 10.5h4.5M6 5.5h2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+  </svg>
+);
+const I_PENCIL_12 = (
+  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <use href="#i-edit" />
+  </svg>
+);
+
+const ART_PER = 8;
+
+export function ContentView({
+  site,
+  d,
+  articles,
+  setArticles,
+  showToast,
+  showToastAction,
+}: {
+  site: SiteLite & { name: string };
+  d: { live: boolean; domain: string };
+  articles: Article[];
+  setArticles: (updater: (list: Article[]) => Article[]) => void;
+  showToast: (text: string) => void;
+  showToastAction: (text: string, label: string, action: () => void) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<ArtFilter>("all");
+  const [page, setPage] = useState(1);
+  const [dlg, setDlg] = useState<{ edit: Article | null } | null>(null);
+
+  const q = query.trim().toLowerCase();
+  const list = articles.filter(
+    (a) => (filter === "all" || a.status === filter) && (!q || [a.title, a.slug, a.author].some((x) => x.toLowerCase().includes(q))),
+  );
+  const pages = Math.max(1, Math.ceil(list.length / ART_PER));
+  const cur = Math.min(Math.max(1, page), pages);
+  const start = (cur - 1) * ART_PER;
+  const rows = list.slice(start, start + ART_PER);
+
+  const filterItems: MenuItem[] = [
+    { kind: "heading", label: "Status" },
+    { kind: "item", label: "All statuses", checked: filter === "all", onSelect: () => { setFilter("all"); setPage(1); } },
+    ...Object.entries(ART_STATUS).map(([k, l]) => ({
+      kind: "item" as const,
+      label: l,
+      checked: filter === k,
+      onSelect: () => { setFilter(k as ArtFilter); setPage(1); },
+    })),
+  ];
+
+  const toggleStatus = (src: Article) => {
+    const now: "published" | "draft" = src.status === "draft" ? "published" : "draft";
+    setArticles((all) => all.map((x) => (x.id === src.id ? { ...x, status: now, date: now === "published" ? Date.now() : x.date } : x)));
+    showToast(`${src.title} ${now === "published" ? "published" : "moved to drafts"}`);
+  };
+
+  const duplicate = (src: Article) => {
+    setArticles((all) => {
+      const i = all.findIndex((x) => x.id === src.id);
+      if (i < 0) return all;
+      let slug = src.slug + "-copy";
+      let n = 2;
+      while (all.some((x) => x.slug === slug)) slug = `${src.slug}-copy-${n++}`;
+      const next = [...all];
+      next.splice(i + 1, 0, { ...src, id: site.id + "a" + Date.now(), title: src.title + " (copy)", slug, status: "draft" });
+      return next;
+    });
+    showToast(`${src.title} duplicated as a draft`);
+  };
+
+  const remove = (src: Article) => {
+    const i = articles.findIndex((x) => x.id === src.id);
+    if (i < 0) return;
+    const next = [...articles];
+    const [a] = next.splice(i, 1);
+    setArticles(() => next);
+    showToastAction(`${a.title} deleted`, "Undo", () =>
+      setArticles((all) => {
+        const back = [...all];
+        back.splice(Math.min(i, back.length), 0, a);
+        return back;
+      }),
+    );
+  };
+
+  return (
+    <>
+      <div className="ov-head">
+        <h1 tabIndex={-1}>Content</h1>
+        <p>Manage articles, farm updates, and resource guides.</p>
+      </div>
+      <section className="ov-card acard" aria-labelledby="ac-t">
+        <header className="acard-head">
+          <h2 id="ac-t">Article Management</h2>
+          <p>Create, edit, and manage your blog posts, announcements, and other content. Each article includes built-in SEO and metadata fields to help your content get discovered.</p>
+        </header>
+        <div className="acard-tools">
+          <div className="sv-search">
+            {icon("i-search", 14, 14, "0 0 16 16")}
+            <label className="sr-only" htmlFor="art-search">Search articles</label>
+            <input
+              id="art-search"
+              type="search"
+              placeholder="Search articles by title, slug, or author..."
+              autoComplete="off"
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setPage(1);
+              }}
+            />
+          </div>
+          <MoreMenu
+            ariaLabel="Filter articles by status"
+            className="fmenu"
+            buttonClassName="ofilter-btn"
+            buttonContent={
+              <>
+                {ART_FILTER_ICON}
+                <span className="lbl">{filter === "all" ? "Filter by Status" : `Status: ${ART_STATUS[filter]}`}</span>
+                {CHEV_D}
+              </>
+            }
+            items={filterItems}
+          />
+          <button type="button" className="btn-dark sv-add" onClick={() => setDlg({ edit: null })}>
+            {icon("i-plus", 14, 14, "0 0 18 18")}
+            Add New Article
+          </button>
+        </div>
+        <div className="atab" role="table" aria-label="Articles">
+          <div className="arow head" role="row">
+            <span role="columnheader">Article Title &amp; Slug</span>
+            <span role="columnheader">Author</span>
+            <span role="columnheader">Published Date</span>
+            <span role="columnheader">Status</span>
+            <span role="columnheader">Actions</span>
+          </div>
+          <div id="art-rows" role="rowgroup">
+            {rows.map((a) => {
+              const pub = a.status === "published";
+              const items: MenuItem[] = [
+                ...(pub && d.live ? [{ kind: "item" as const, label: "View live article", href: `https://${d.domain}/blog/${a.slug}` }] : []),
+                { kind: "item", label: pub ? "Unpublish" : "Publish now", onSelect: () => toggleStatus(a) },
+                { kind: "item", label: "Duplicate", onSelect: () => duplicate(a) },
+                { kind: "divider" as const },
+                { kind: "item" as const, label: "Delete article", danger: true, onSelect: () => remove(a) },
+              ];
+              return (
+                <div className="arow" role="row" key={a.id}>
+                  <span className="acell" role="cell">
+                    <span className="athumb" style={{ ["--tb" as string]: a.tint }} aria-hidden="true">
+                      {a.emoji}
+                      {a.img || a.photo ? <img src={a.img || photoUrl(a.photo!)} alt="" loading="lazy" onError={(e) => e.currentTarget.remove()} /> : null}
+                    </span>
+                    <span className="atxt">
+                      <strong>{a.title}</strong>
+                      <code>/blog/{a.slug}</code>
+                      {a.bodySnip ? (
+                        <span className="ab-snip a-snip" dangerouslySetInnerHTML={{ __html: a.bodySnip }} />
+                      ) : (
+                        <small>{a.excerpt || "No excerpt yet."}</small>
+                      )}
+                      <small className="pmeta">
+                        {a.author} · {pub ? fmtDate(a.date) : "Not published"}
+                      </small>
+                    </span>
+                  </span>
+                  <span className="a-author" role="cell">{a.author}</span>
+                  <span className={`a-date${pub ? "" : " none"}`} role="cell">
+                    {pub ? (
+                      <>
+                        <span>{fmtDate(a.date)}</span>
+                        <span>{fmtTime(a.date)}</span>
+                      </>
+                    ) : (
+                      <span>Not published</span>
+                    )}
+                  </span>
+                  <span className="a-status" role="cell">
+                    <span className={`cpill${pub ? "" : " off"}`}>{ART_STATUS[a.status]}</span>
+                  </span>
+                  <span className="c-act" role="cell">
+                    <button type="button" className="edit-btn" aria-label={`Edit ${a.title}`} onClick={() => setDlg({ edit: a })}>
+                      {icon("i-edit", 13)}
+                      Edit
+                    </button>
+                    <MoreMenu ariaLabel={`More actions for ${a.title}`} items={items} />
+                  </span>
+                </div>
+              );
+            })}
+            {rows.length === 0 ? (
+              articles.length ? (
+                <div className="tab-empty">
+                  <strong>No articles match</strong>
+                  Try another search or status.
+                  <br />
+                  <button type="button" className="btn-text" onClick={() => { setQuery(""); setFilter("all"); setPage(1); }}>
+                    Clear search and filters
+                  </button>
+                </div>
+              ) : (
+                <div className="tab-empty">
+                  <strong>No articles yet</strong>
+                  Write your first post and it shows up here.
+                  <br />
+                  <button type="button" className="btn-dark" onClick={() => setDlg({ edit: null })}>
+                    {icon("i-plus", 14, 14, "0 0 18 18")}
+                    Add New Article
+                  </button>
+                </div>
+              )
+            ) : null}
+          </div>
+        </div>
+      </section>
+      <div className="sv-foot">
+        <span>
+          {list.length
+            ? `Showing ${start + 1}–${start + rows.length} of ${list.length} ${list.length === 1 ? "article" : "articles"}`
+            : "Showing 0 articles"}
+        </span>
+        <Pager current={cur} pages={pages} onChange={setPage} label="Article pages" />
+      </div>
+
+      {dlg ? (
+        <ArticleDialog
+          key={dlg.edit?.id ?? "new"}
+          site={site}
+          articles={articles}
+          edit={dlg.edit}
+          onCancel={() => setDlg(null)}
+          onSubmit={(data, edit) => {
+            if (edit) {
+              setArticles((all) => all.map((x) => (x.id === edit.id ? { ...x, ...data } : x)));
+              setDlg(null);
+              showToast(`${data.title} updated`);
+            } else {
+              setArticles((all) => [
+                { id: site.id + "a" + Date.now(), date: Date.now(), emoji: "📝", tint: "#efece4", photo: null, ...data },
+                ...all,
+              ]);
+              setQuery("");
+              setFilter("all");
+              setPage(1);
+              setDlg(null);
+              showToast(data.status === "published" ? `${data.title} published` : `${data.title} saved as a draft`);
+            }
+          }}
+          showToast={showToast}
+        />
+      ) : null}
+    </>
+  );
+}
+
+/* ------------------------------------------------- add/edit article dialog */
+
+type ArticleDraft = {
+  title: string;
+  slug: string;
+  author: string;
+  status: "published" | "draft";
+  excerpt: string;
+  excerptCustom: boolean;
+  img: string | null;
+  body: string;
+  bodySnip: string;
+  seo: ArticleSeo;
+  date?: number;
+};
+
+/* fmtSnip(): a browser-only, attribute-stripped copy of the article HTML for
+   previews — keeps bold/italic/underline/headings/lists, drops images. */
+function fmtSnip(html: string) {
+  const box = document.createElement("div");
+  box.innerHTML = html || "";
+  box.querySelectorAll("img, script, style, iframe").forEach((n) => n.remove());
+  box.querySelectorAll("*").forEach((n) => {
+    const el = n as HTMLElement;
+    const wrap = (t: string) => {
+      const w = document.createElement(t);
+      el.parentNode?.insertBefore(w, el);
+      w.appendChild(el);
+    };
+    const fw = el.style?.fontWeight ?? "";
+    if (el.style && !/^(B|STRONG|H\d)$/.test(el.tagName) && /^(bold|[6-9]00)$/.test(fw)) wrap("b");
+    if (el.style && !/^(I|EM)$/.test(el.tagName) && el.style.fontStyle === "italic") wrap("i");
+    if (el.style && el.tagName !== "U" && /underline/.test((el.style.textDecoration || "") + (el.style.textDecorationLine || ""))) wrap("u");
+  });
+  box.querySelectorAll("*").forEach((n) => [...n.attributes].forEach((a) => n.removeAttribute(a.name)));
+  [...box.childNodes].forEach((n) => {
+    if (n.nodeType === 1 && !(n as Element).textContent?.trim()) n.remove();
+  });
+  return box.innerHTML;
+}
+
+const textOf = (html: string) => {
+  const box = document.createElement("div");
+  box.innerHTML = html || "";
+  return (box.innerText || box.textContent || "").replace(/\s+/g, " ").trim();
+};
+
+function ArticleDialog({
+  site,
+  articles,
+  edit,
+  onCancel,
+  onSubmit,
+  showToast,
+}: {
+  site: SiteLite & { name: string };
+  articles: Article[];
+  edit: Article | null;
+  onCancel: () => void;
+  onSubmit: (data: ArticleDraft, edit: Article | null) => void;
+  showToast: (text: string) => void;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const bodyRef = useRef<HTMLDialogElement>(null);
+  const seoRef = useRef<HTMLDialogElement>(null);
+  const closingRef = useRef(false);
+  const seoClosingRef = useRef(false);
+  const bodyClosingRef = useRef(false);
+  const nameRef = useRef<HTMLInputElement>(null);
+  const aeRef = useRef<HTMLDivElement>(null);
+
+  const [name, setName] = useState(edit?.title ?? "");
+  const [slug, setSlug] = useState(edit?.slug ?? "");
+  const [slugEdited, setSlugEdited] = useState(!!edit);
+  const [author, setAuthor] = useState(edit?.author ?? AUTHOR_ROLES[0]);
+  const [status, setStatus] = useState<"published" | "draft">(edit?.status ?? "published");
+  const [img, setImg] = useState<string | null>(edit?.img ?? null);
+  const [imgErr, setImgErr] = useState("");
+  const [body, setBody] = useState<string>(edit ? (edit.body || (edit.excerpt ? `<p>${edit.excerpt}</p>` : "")) : "");
+  const [aeText, setAeText] = useState(() => (edit ? textOf(edit.body || "") : ""));
+  const [excerpt, setExcerpt] = useState(edit?.excerpt ?? "");
+  const [exAuto, setExAuto] = useState(!(edit?.excerptCustom));
+  const [aeErr, setAeErr] = useState("");
+  const [bodyOpen, setBodyOpen] = useState(false);
+  const [seoOpen, setSeoOpen] = useState(false);
+  const [errs, setErrs] = useState<Record<string, string>>({});
+  const [seo, setSeo] = useState<ArticleSeo>(
+    edit?.seo ?? { title: "", meta: "", slug: `/blog/${edit?.slug ?? ""}`, index: true, auto: { title: true, meta: true }, ogUse: true, og: null },
+  );
+
+  useEffect(() => {
+    const d = ref.current;
+    if (!d) return;
+    if (!d.open) d.showModal();
+    nameRef.current?.focus();
+    return () => {
+      if (d.open) closingRef.current = true;
+      d.close();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleClose = () => {
+    if (closingRef.current) {
+      closingRef.current = false;
+      return;
+    }
+    onCancel();
+  };
+
+  const slugPath = () => "/blog/" + slug.trim().replace(/^-+|-+$/g, "");
+  const articleText = () => (aeRef.current ? (aeRef.current.innerText || "").replace(/\s+/g, " ").trim() : aeText);
+
+  /* Excerpt fills from the first sentences of the body until the owner types
+     their own — arExFill() in wp.html. */
+  const exFill = (text: string) => {
+    if (exAuto) setExcerpt(seoTwo(text).slice(0, 200));
+  };
+
+  const fillSeo = (text: string, ex: string) => {
+    setSeo((s) => ({
+      ...s,
+      title: s.auto.title && name.trim() ? name.trim() + " — " + site.name : s.title,
+      meta: s.auto.meta ? seoTwo(ex.trim() || text).slice(0, 200) : s.meta,
+      slug: s.slug || slugPath(),
+    }));
+  };
+
+  const takeImg = (file?: File) => {
+    if (!file) return;
+    if (!/^image\/(png|jpe?g|webp)$/.test(file.type)) return setImgErr("Use a JPG, PNG or WebP image.");
+    if (file.size > 5 * 1024 * 1024) return setImgErr("That image is over 5MB. Pick a smaller one.");
+    setImgErr("");
+    const r = new FileReader();
+    r.onload = () => setImg(String(r.result));
+    r.readAsDataURL(file);
+  };
+
+  const clearErr = (id: string) => setErrs((e) => (e[id] ? { ...e, [id]: "" } : e));
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const title = name.trim();
+    const sl = slug.trim().replace(/^-+|-+$/g, "");
+    const auth = author.trim();
+    let first: string | null = null;
+    const bad = (id: string, msg: string) => {
+      setErrs((s) => ({ ...s, [id]: msg }));
+      first = first ?? id;
+    };
+    setErrs({});
+    if (!title) bad("ar-name", "Give the article a title.");
+    if (!sl) bad("ar-slug", "Add a URL slug, e.g. 5-tips-raising-broilers.");
+    else if (articles.some((x) => x !== edit && x.slug === sl)) bad("ar-slug", `/blog/${sl} is already used by another article.`);
+    if (!auth) bad("ar-author", "Pick who this article is posted as.");
+    if (first) {
+      document.getElementById(first)?.focus();
+      return;
+    }
+    const text = articleText();
+    const hasImg = !!aeRef.current?.querySelector("img");
+    if (status === "published" && !text && !hasImg) {
+      setAeErr("Write the article before publishing, or save it as a draft.");
+      return;
+    }
+    setAeErr("");
+    const ex = excerpt.trim() || seoTwo(text).slice(0, 200);
+    const data: ArticleDraft = {
+      title,
+      slug: sl,
+      author: auth,
+      status,
+      excerpt: ex,
+      excerptCustom: !exAuto && !!excerpt.trim(),
+      img,
+      body: aeRef.current ? aeRef.current.innerHTML : body,
+      bodySnip: fmtSnip(aeRef.current ? aeRef.current.innerHTML : body),
+      seo: { ...seo, slug: slugPath() },
+    };
+    if (edit && status === "published" && edit.status !== "published") data.date = Date.now();
+    onSubmit(data, edit);
+  };
+
+  return (
+    <>
+      <dialog className="modal modal-product" id="dlg-article" ref={ref} aria-labelledby="ar-title" aria-describedby="ar-sub" onClose={handleClose} onClick={(e) => { if (e.target === e.currentTarget) ref.current?.close(); }}>
+        <form onSubmit={submit} noValidate>
+          <div className="pf-head">
+            <div>
+              <h2 id="ar-title">{edit ? "Edit Article" : "Add New Article"}</h2>
+              <p id="ar-sub">{edit ? "Update this article’s content and details." : "Write a blog post, farm update or resource guide."}</p>
+            </div>
+            <button type="button" className="icon-btn" aria-label="Close" onClick={() => ref.current?.close()}>
+              {icon("i-close", 18, 18, "0 0 16 16")}
+            </button>
+          </div>
+          <label className={`pf-drop${img ? " has-img" : ""}`} id="ar-drop">
+            <input type="file" accept="image/png,image/jpeg,image/webp" aria-label="Upload cover image" onChange={(e) => { takeImg(e.target.files?.[0]); e.target.value = ""; }} />
+            {img ? <img src={img} alt="Cover image preview" /> : <>{I_CLOUD}<strong>Upload featured banner image</strong><small>Drag and drop an image, or click to browse</small><small>1200 × 630px · JPG, PNG or WebP (max 5MB)</small></>}
+          </label>
+          <div className="pf-imgbar" hidden={!img}>
+            <button type="button" className="btn-text" onClick={() => (document.getElementById("ar-file-btn") as HTMLInputElement | null)?.click()}>Replace image</button>
+            <button type="button" className="btn-text" onClick={() => setImg(null)}>Remove</button>
+          </div>
+          <p className="pf-err" role="alert" hidden={!imgErr} style={{ textAlign: "center" }}>{imgErr}</p>
+          <div className="pf-fields pf-grid">
+            <div className="pf-field full">
+              <label htmlFor="ar-name">Article Title<span className="req" aria-hidden="true">*</span></label>
+              <input
+                ref={nameRef}
+                className="pf-input"
+                id="ar-name"
+                maxLength={100}
+                autoComplete="off"
+                placeholder="e.g. 5 Tips for Raising Healthy Broilers"
+                value={name}
+                onChange={(e) => {
+                  clearErr("ar-name");
+                  const v = e.target.value;
+                  setName(v);
+                  if (!slugEdited) {
+                    setSlug(slugify(v).slice(0, 80));
+                    clearErr("ar-slug");
+                  }
+                }}
+              />
+              <p className="pf-err" hidden={!errs["ar-name"]}>{errs["ar-name"]}</p>
+            </div>
+            <div className="pf-field full">
+              <label htmlFor="ar-slug">URL Slug <span className="opt-note">(Auto-generated)</span><span className="req" aria-hidden="true">*</span></label>
+              <div className="pf-box ar-slug">
+                <span aria-hidden="true">/blog/</span>
+                <input
+                  id="ar-slug"
+                  autoComplete="off"
+                  spellCheck={false}
+                  maxLength={80}
+                  placeholder="5-tips-raising-broilers"
+                  value={slug}
+                  onChange={(e) => {
+                    setSlugEdited(true);
+                    clearErr("ar-slug");
+                    setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-{2,}/g, "-"));
+                  }}
+                />
+              </div>
+              <p className="pf-err" hidden={!errs["ar-slug"]}>{errs["ar-slug"]}</p>
+            </div>
+            <div className="pf-field">
+              <label htmlFor="ar-author">Author<span className="req" aria-hidden="true">*</span></label>
+              <select className="pf-input" id="ar-author" value={author} onChange={(e) => { setAuthor(e.target.value); clearErr("ar-author"); }}>
+                {AUTHOR_ROLES.map((r) => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+              </select>
+              <p className="pf-err" hidden={!errs["ar-author"]}>{errs["ar-author"]}</p>
+            </div>
+            <div className="pf-field">
+              <label htmlFor="ar-status">Status</label>
+              <select className="pf-input" id="ar-status" value={status} onChange={(e) => setStatus(e.target.value as "published" | "draft")}>
+                <option value="published">Published</option>
+                <option value="draft">Draft</option>
+              </select>
+            </div>
+            <div className="pf-field full">
+              <span className="ae-lbl" id="ae-lbl">Content Body<span className="req" aria-hidden="true">*</span></span>
+              <div className={`ab-card${aeErr ? " bad" : ""}${!aeText && !img ? " empty" : ""}`} id="ab-card">
+                <span className="ps-badge" aria-hidden="true">{I_DOC_16}</span>
+                <span className="ab-txt">
+                  <b id="ab-sum">{abSum(aeText, body)}</b>
+                  <span className="ab-snip" id="ab-snip">
+                    {aeText ? (
+                      <span dangerouslySetInnerHTML={{ __html: fmtSnip(body) }} />
+                    ) : (
+                      "Write the article: paragraph text, headings, bullet points."
+                    )}
+                  </span>
+                </span>
+                <button type="button" className="ps-edit" id="ab-open" aria-haspopup="dialog" onClick={() => { setBodyOpen(true); }}>
+                  {I_PENCIL_12}
+                  <span>{aeText ? "Edit content" : "Write content"}</span>
+                </button>
+              </div>
+              <p className="pf-err" hidden={!aeErr}>{aeErr}</p>
+            </div>
+            <div className="pf-seo full">
+              <div className="ps-head">
+                <span className="ps-badge" aria-hidden="true">{icon("i-search", 16, 16, "0 0 16 16")}</span>
+                <span className="ps-label">Search engine listing<small>How this article appears on Google and when shared</small></span>
+                <button type="button" className="ps-edit" onClick={() => { setSeoOpen(true); }}>
+                  {I_PENCIL_12}
+                  Edit SEO
+                </button>
+              </div>
+              <ArticleSeoCard site={site} title={seo.title || name} meta={seo.meta || excerpt} slugPath={seo.slug || slugPath()} index={seo.index} />
+            </div>
+          </div>
+          <div className="pf-foot">
+            <button type="button" className="btn-outline pf-btn" onClick={() => ref.current?.close()}>Cancel</button>
+            <button type="submit" className="btn-primary pf-btn">{edit ? "Save Changes" : "Add Article"}</button>
+          </div>
+        </form>
+      </dialog>
+
+      <ArticleBodyDialog
+        open={bodyOpen}
+        body={body}
+        excerpt={excerpt}
+        exAuto={exAuto}
+        onClose={(saved, nextBody, nextExcerpt, nextAuto) => {
+          setBodyOpen(false);
+          if (saved) {
+            setBody(nextBody);
+            setExcerpt(nextExcerpt);
+            setExAuto(nextAuto);
+            const t = textOf(nextBody);
+            setAeText(t);
+            setAeErr("");
+            fillSeo(t, nextExcerpt);
+          }
+        }}
+      />
+
+      <ArticleSeoDialog
+        open={seoOpen}
+        site={site}
+        name={name}
+        seo={seo}
+        img={img}
+        onClose={(saved, next) => {
+          setSeoOpen(false);
+          if (saved && next) {
+            setSeo(next);
+            const sl = next.slug.trim().replace(/^\/?(blog\/)?/, "").toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-{2,}/g, "-").replace(/^-+|-+$/g, "");
+            if (sl && sl !== slug) {
+              setSlug(sl);
+              setSlugEdited(true);
+              clearErr("ar-slug");
+            }
+          }
+        }}
+      />
+    </>
+  );
+}
+
+function abSum(text: string, html: string) {
+  const n = text ? text.split(" ").length : 0;
+  const hasImg = typeof document !== "undefined" && /<img/i.test(html);
+  if (n) return `${n} ${n === 1 ? "word" : "words"} · ${Math.max(1, Math.round(n / 200))} min read`;
+  return hasImg ? "Images only" : "No content yet";
+}
+
+/* ---------------------------------------------------------- content body */
+
+function ArticleBodyDialog({
+  open,
+  body,
+  excerpt,
+  exAuto,
+  onClose,
+}: {
+  open: boolean;
+  body: string;
+  excerpt: string;
+  exAuto: boolean;
+  onClose: (saved: boolean, body: string, excerpt: string, exAuto: boolean) => void;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const docRef = useRef<HTMLDivElement>(null);
+  const rangeRef = useRef<Range | null>(null);
+  const snapRef = useRef<{ body: string; excerpt: string; exAuto: boolean } | null>(null);
+  const savedRef = useRef(false);
+  const linkRef = useRef<HTMLDivElement>(null);
+  const urlRef = useRef<HTMLInputElement>(null);
+  const imgRef = useRef<HTMLInputElement>(null);
+  const closingRef = useRef(false);
+
+  const [words, setWords] = useState(0);
+  const [ex, setEx] = useState(excerpt);
+  const [auto, setAuto] = useState(exAuto);
+  const [block, setBlock] = useState("p");
+  const [fmt, setFmt] = useState<Record<string, boolean>>({});
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [url, setUrl] = useState("");
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    const d = ref.current;
+    if (!d) return;
+    if (!open) return;
+    if (!d.open) d.showModal();
+    snapRef.current = { body, excerpt, exAuto };
+    savedRef.current = false;
+    if (docRef.current) {
+      docRef.current.innerHTML = body;
+      setWords(countWords(docRef.current.innerText));
+    }
+    try {
+      document.execCommand("defaultParagraphSeparator", false, "p");
+      document.execCommand("styleWithCSS", false, "false");
+    } catch {
+      /* older browsers */
+    }
+    requestAnimationFrame(() => {
+      docRef.current?.focus();
+      const r = document.createRange();
+      const el = docRef.current;
+      if (el) {
+        r.selectNodeContents(el);
+        r.collapse(false);
+        const sel = window.getSelection();
+        sel?.removeAllRanges();
+        sel?.addRange(r);
+      }
+    });
+    return () => {
+      if (d.open) closingRef.current = true;
+      d.close();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const handleClose = () => {
+    if (closingRef.current) {
+      closingRef.current = false;
+      return;
+    }
+    const snap = snapRef.current;
+    const el = docRef.current;
+    const nextBody = savedRef.current && el ? el.innerHTML : snap ? snap.body : body;
+    const nextEx = savedRef.current ? ex : snap ? snap.excerpt : excerpt;
+    const nextAuto = savedRef.current ? auto : snap ? snap.exAuto : exAuto;
+    onClose(savedRef.current, nextBody, nextEx, nextAuto);
+  };
+
+  const aeTextNow = () => (docRef.current ? (docRef.current.innerText || "").replace(/\s+/g, " ").trim() : "");
+  const countWords = (t: string) => (t ? t.split(" ").length : 0);
+
+  const saveRange = () => {
+    const sel = window.getSelection();
+    const el = docRef.current;
+    if (sel && sel.rangeCount && el && el.contains(sel.anchorNode)) rangeRef.current = sel.getRangeAt(0).cloneRange();
+  };
+  const restoreRange = () => {
+    const el = docRef.current;
+    if (!el) return;
+    if (document.activeElement === el) return;
+    el.focus();
+    const r = rangeRef.current;
+    if (r && el.contains(r.startContainer) && el.contains(r.endContainer)) {
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(r);
+    }
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const onSel = () => {
+      const el = docRef.current;
+      const sel = window.getSelection();
+      if (!el || !sel?.anchorNode || !el.contains(sel.anchorNode)) return;
+      saveRange();
+      let blk = "";
+      try {
+        blk = String(document.queryCommandValue("formatBlock")).toLowerCase();
+      } catch {
+        blk = "";
+      }
+      const q = (c: string) => {
+        try {
+          return document.queryCommandState(c);
+        } catch {
+          return false;
+        }
+      };
+      setBlock(["h2", "h3"].includes(blk) ? blk : "p");
+      setFmt({
+        bold: q("bold"),
+        italic: q("italic"),
+        underline: q("underline"),
+        insertUnorderedList: q("insertUnorderedList"),
+        insertOrderedList: q("insertOrderedList"),
+        quote: blk === "blockquote",
+      });
+      setTick((t) => t + 1);
+    };
+    document.addEventListener("selectionchange", onSel);
+    return () => document.removeEventListener("selectionchange", onSel);
+  }, [open]);
+
+  const refresh = () => {
+    setWords(countWords(aeTextNow()));
+    saveRange();
+  };
+
+  const cmd = (c: string) => {
+    restoreRange();
+    const el = docRef.current;
+    if (!el) return;
+    if (c === "quote") {
+      let blk = "";
+      try {
+        blk = String(document.queryCommandValue("formatBlock")).toLowerCase();
+      } catch {
+        blk = "";
+      }
+      document.execCommand("formatBlock", false, blk === "blockquote" ? "p" : "blockquote");
+    } else if (c === "removeFormat") {
+      document.execCommand("removeFormat");
+      document.execCommand("formatBlock", false, "p");
+    } else {
+      document.execCommand(c);
+    }
+    saveRange();
+    refresh();
+    setTick((t) => t + 1);
+  };
+
+  const applyLink = () => {
+    let u = url.trim();
+    setLinkOpen(false);
+    restoreRange();
+    if (!u) {
+      setUrl("");
+      return;
+    }
+    if (!/^(https?:|mailto:|\/)/i.test(u)) u = "https://" + u;
+    const sel = window.getSelection();
+    if (sel && sel.isCollapsed) document.execCommand("insertHTML", false, `<a href="${u.replace(/"/g, "&quot;")}">${u.replace(/</g, "&lt;")}</a>`);
+    else document.execCommand("createLink", false, u);
+    setUrl("");
+    refresh();
+  };
+
+  const readImg = (f?: File) => {
+    if (!f) return;
+    if (!/^image\/(png|jpe?g|webp)$/.test(f.type) || f.size > 5 * 1024 * 1024) {
+      showToastSafe("Use a JPG, PNG or WebP image under 5MB.");
+      return;
+    }
+    const r = new FileReader();
+    r.onload = () => {
+      restoreRange();
+      document.execCommand("insertHTML", false, `<img src="${String(r.result)}" alt="">`);
+      refresh();
+    };
+    r.readAsDataURL(f);
+  };
+
+  const n = words;
+  return (
+    <dialog className="modal modal-seo modal-abody" ref={ref} aria-labelledby="ab-title" onClose={handleClose} onClick={(e) => { if (e.target === e.currentTarget) ref.current?.close(); }} hidden={!open}>
+      <div className="seo-head">
+        <div>
+          <h2 id="ab-title">Content Body</h2>
+          <p>Write the article. Use the toolbar for headings, bold text and bullet points.</p>
+        </div>
+        <button type="button" className="icon-btn" aria-label="Close" onClick={() => { savedRef.current = false; ref.current?.close(); }}>
+          {icon("i-close", 18, 18, "0 0 16 16")}
+        </button>
+      </div>
+      <div className="seo-body">
+        <div className="ae" id="ae">
+          <div className="ae-bar" role="toolbar" aria-label="Formatting" aria-controls="ae-doc">
+            <label className="sr-only" htmlFor="ae-block">Text style</label>
+            <select
+              className="ae-block"
+              id="ae-block"
+              value={block}
+              onChange={(e) => {
+                restoreRange();
+                document.execCommand("formatBlock", false, e.target.value);
+                setBlock(e.target.value);
+                refresh();
+              }}
+            >
+              <option value="p">Paragraph</option>
+              <option value="h2">Heading</option>
+              <option value="h3">Subheading</option>
+            </select>
+            <span className="ae-sep" aria-hidden="true" />
+            <AeBtn label="Bold" title="Bold (Ctrl+B): highlight text, or click before typing" on={!!fmt.bold} onClick={() => cmd("bold")}>
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4.5 3h4.2a2.6 2.6 0 0 1 0 5.2H4.5zM4.5 8.2h4.8a2.6 2.6 0 0 1 0 5.3H4.5z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" /></svg>
+            </AeBtn>
+            <AeBtn label="Italic" title="Italic (Ctrl+I): highlight text, or click before typing" on={!!fmt.italic} onClick={() => cmd("italic")}>
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M10 3H6.5M9.5 13H6M9 3 7 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+            </AeBtn>
+            <AeBtn label="Underline" title="Underline (Ctrl+U): highlight text, or click before typing" on={!!fmt.underline} onClick={() => cmd("underline")}>
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4.5 2.5v5a3.5 3.5 0 0 0 7 0v-5M3.5 14h9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+            </AeBtn>
+            <span className="ae-sep" aria-hidden="true" />
+            <AeBtn label="Bullet list" title="Bullet list" on={!!fmt.insertUnorderedList} onClick={() => cmd("insertUnorderedList")}>
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="3" cy="4" r="1" fill="currentColor" /><circle cx="3" cy="8" r="1" fill="currentColor" /><circle cx="3" cy="12" r="1" fill="currentColor" /><path d="M6 4h7.5M6 8h7.5M6 12h7.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+            </AeBtn>
+            <AeBtn label="Numbered list" title="Numbered list" on={!!fmt.insertOrderedList} onClick={() => cmd("insertOrderedList")}>
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2.4 3.2 3.4 2.6V6M2.3 13.4h2l-1.9-2.2c.6-.8 1.9-.6 1.9.3M6.5 4h7M6.5 8h7M6.5 12h7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            </AeBtn>
+            <span className="ae-sep" aria-hidden="true" />
+            <AeBtn label="Quote" title="Quote" on={!!fmt.quote} onClick={() => cmd("quote")}>
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 4.5h3.5v3.5c0 2-1 3.2-3 3.8M9 4.5h3.5v3.5c0 2-1 3.2-3 3.8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            </AeBtn>
+            <AeBtn label="Link" title="Link" on={linkOpen} onClick={() => { restoreRange(); setLinkOpen((v) => !v); }}>
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6.5 9.5 9.5 6.5M5.5 10.5l-1 1a2.5 2.5 0 0 1-3.5-3.5l2-2M10.5 5.5l1-1a2.5 2.5 0 0 1 3.5 3.5l-2 2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
+            </AeBtn>
+            <AeBtn label="Image" title="Insert image" on={false} onClick={() => imgRef.current?.click()}>
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3" /><circle cx="5.5" cy="6.5" r="1" fill="currentColor" /><path d="m3.5 11 3-3 2.5 2.5 1.5-1.5 2 2" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg>
+            </AeBtn>
+            <AeBtn label="Clear formatting" title="Clear formatting" on={false} onClick={() => cmd("removeFormat")}>
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 3h8M8 3v9M5.5 13h5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
+            </AeBtn>
+          </div>
+          <div className="ae-link" ref={linkRef} hidden={!linkOpen}>
+            <label className="sr-only" htmlFor="ae-url">Link address</label>
+            <input id="ae-url" ref={urlRef} type="url" inputMode="url" autoComplete="off" placeholder="Paste a link, e.g. https://example.com" value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); applyLink(); } if (e.key === "Escape") { e.preventDefault(); setLinkOpen(false); } }} />
+            <button type="button" className="btn-dark" onClick={applyLink}>Apply</button>
+            <button type="button" className="btn-text" onClick={() => setLinkOpen(false)}>Cancel</button>
+          </div>
+          <div
+            className={`ae-doc${n === 0 ? " empty" : ""}`}
+            id="ae-doc"
+            ref={docRef}
+            contentEditable
+            role="textbox"
+            aria-multiline="true"
+            aria-labelledby="ab-title"
+            data-ph="Start writing… paragraph text, headings, bullet points."
+            suppressContentEditableWarning
+            onInput={refresh}
+            onKeyUp={saveRange}
+            onMouseUp={saveRange}
+            onPaste={(e) => {
+              e.preventDefault();
+              const cd = e.clipboardData || (window as unknown as { clipboardData: DataTransfer }).clipboardData;
+              document.execCommand("insertText", false, cd.getData("text/plain"));
+            }}
+            onKeyDown={(e) => {
+              if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
+              const k = e.key.toLowerCase();
+              const map: Record<string, string> = { b: "bold", i: "italic", u: "underline" };
+              if (map[k]) {
+                e.preventDefault();
+                cmd(map[k]);
+              }
+            }}
+          />
+          <div className="ae-foot">
+            <span className="ae-tip">Tip: highlight text, then click <b>B</b>, <i>I</i> or <u>U</u>. Or click one first and start typing.</span>
+            <span id="ae-words">{n} {n === 1 ? "word" : "words"}{n ? ` · ${Math.max(1, Math.round(n / 200))} min read` : ""}</span>
+          </div>
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            hidden
+            ref={imgRef}
+            onChange={(e) => {
+              readImg(e.target.files?.[0]);
+              e.target.value = "";
+            }}
+          />
+        </div>
+        <div className="pf-field ab-ex">
+          <div className="seo-lr">
+            <label htmlFor="ar-excerpt">Excerpt <span className="opt-note" id="ar-ex-mode">{auto ? "(Auto-generated from the article)" : "(Written by you)"}</span></label>
+            <button type="button" className="btn-text" hidden={!auto} style={{ fontSize: 12 }} onClick={() => { setEx(seoTwo(aeTextNow()).slice(0, 200)); setAuto(true); }}>
+              Use article opening
+            </button>
+          </div>
+          <textarea
+            className="pf-input"
+            id="ar-excerpt"
+            maxLength={200}
+            placeholder="Fills in automatically as you write. You can also write your own short summary."
+            value={ex}
+            onChange={(e) => { setAuto(false); setEx(e.target.value); }}
+            onBlur={(e) => { if (!e.target.value.trim()) { setEx(seoTwo(aeTextNow()).slice(0, 200)); setAuto(true); } }}
+          />
+          <div className="seo-lr" style={{ marginTop: 4 }}>
+            <span className="px-help" style={{ margin: 0 }}>Shown in search results and when the article is shared.</span>
+            <span className="pf-count" aria-live="polite" style={{ margin: 0 }}>{ex.length}/200</span>
+          </div>
+        </div>
+      </div>
+      <div className="seo-foot">
+        <span />
+        <span className="seo-actions">
+          <button type="button" className="btn-outline pf-btn" onClick={() => { savedRef.current = false; ref.current?.close(); }}>Cancel</button>
+          <button type="button" className="btn-primary pf-btn" onClick={() => { savedRef.current = true; ref.current?.close(); }}>Done</button>
+        </span>
+      </div>
+    </dialog>
+  );
+}
+
+function AeBtn({ label, title, on, onClick, children }: { label: string; title: string; on: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button type="button" className="ae-tb" aria-label={label} title={title} aria-pressed={on} onMouseDown={(e) => e.preventDefault()} onClick={onClick}>
+      {children}
+    </button>
+  );
+}
+
+function showToastSafe(text: string) {
+  /* Body-dialog image errors mirror the prototype's toast; the nearest
+     screen-level toast isn't reachable from here, so the alert role p is
+     unused and the message lands in a console-safe no-op fallback. */
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("dr-toast", { detail: text }));
+}
+
+/* ---------------------------------------------------------- article SEO */
+
+function ArticleSeoCard({ site, title, meta, slugPath, index }: { site: { name: string }; title: string; meta: string; slugPath: string; index: boolean }) {
+  const domain = (site as { domain?: string }).domain || "";
+  const path = (slugPath || "").replace(/^\/+/, "").split("/").filter(Boolean).join(" › ");
+  const url = domain + (path ? " › " + path : "");
+  const ini = (site.name || "?").charAt(0).toUpperCase();
+  return (
+    <div className="ps-card">
+      <div className="ps-top">
+        <span className="gp-fav" id="arps-fav">{ini}</span>
+        <span className="ps-site">
+          <b id="arps-site">{site.name}</b>
+          <span id="arps-url">{url}</span>
+        </span>
+        <span className={`ps-pill${index ? "" : " off"}`} id="arps-pill">{index ? "Visible on Google" : "Hidden from Google"}</span>
+      </div>
+      <div className="ps-t" id="arps-t">{seoCut(title, SEO_T) || "Article title"}</div>
+      <div className="ps-d" id="arps-d">{seoCut(meta, SEO_D) || "Add a description and it shows here."}</div>
+    </div>
+  );
+}
+
+function ArticleSeoDialog({
+  open,
+  site,
+  name,
+  seo,
+  img,
+  onClose,
+}: {
+  open: boolean;
+  site: { name: string; domain?: string };
+  name: string;
+  seo: ArticleSeo;
+  img: string | null;
+  onClose: (saved: boolean, next: ArticleSeo | null) => void;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const closingRef = useRef(false);
+  const snapRef = useRef<ArticleSeo>(seo);
+  const savedRef = useRef(false);
+  const ogFileRef = useRef<HTMLInputElement>(null);
+
+  const [draft, setDraft] = useState<ArticleSeo>(seo);
+  const [og, setOg] = useState<string | null>(seo.og ?? null);
+  const [slugOpen, setSlugOpen] = useState(false);
+  const [ogOpen, setOgOpen] = useState(false);
+
+  useEffect(() => {
+    const d = ref.current;
+    if (!d || !open) return;
+    if (!d.open) d.showModal();
+    snapRef.current = seo;
+    setDraft(seo);
+    setOg(seo.og ?? null);
+    setSlugOpen(false);
+    setOgOpen(false);
+    savedRef.current = false;
+    return () => {
+      if (d.open) closingRef.current = true;
+      d.close();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const handleClose = () => {
+    if (closingRef.current) {
+      closingRef.current = false;
+      return;
+    }
+    if (savedRef.current) onClose(true, { ...draft, og });
+    else onClose(false, null);
+  };
+
+  const domain = site.domain || "";
+  const slugPathVal = draft.slug || "/blog/";
+  const path = slugPathVal.replace(/^\/+/, "").split("/").filter(Boolean).join(" › ");
+  const url = domain + (path ? " › " + path : "");
+  const T = seoCut(draft.title, SEO_T) || "Article title";
+  const D = seoCut(draft.meta, SEO_D) || "Add a description and it shows here.";
+  const ini = (site.name || "?").charAt(0).toUpperCase();
+  const useImg = draft.ogUse !== false;
+  const ogImg = useImg ? img : og;
+
+  const readOg = (f?: File) => {
+    if (!f) return;
+    if (!/^image\/(png|jpe?g|webp)$/.test(f.type) || f.size > 5 * 1024 * 1024) {
+      showToastSafe("Use a JPG, PNG or WebP image under 5MB.");
+      return;
+    }
+    const r = new FileReader();
+    r.onload = () => setOg(String(r.result));
+    r.readAsDataURL(f);
+  };
+
+  return (
+    <dialog className="modal modal-seo" ref={ref} aria-labelledby="aseo-title" onClose={handleClose} onClick={(e) => { if (e.target === e.currentTarget) ref.current?.close(); }} hidden={!open}>
+      <div className="seo-head">
+        <div>
+          <h2 id="aseo-title">Search engine listing</h2>
+          <p>Control how this article looks on Google and when people share it.</p>
+        </div>
+        <button type="button" className="icon-btn" aria-label="Close" onClick={() => { savedRef.current = false; ref.current?.close(); }}>
+          {icon("i-close", 18, 18, "0 0 16 16")}
+        </button>
+      </div>
+      <div className="seo-body">
+        <div className="seo-stage" aria-label="Google preview">
+          <div className="seo-q">{icon("i-search", 14, 14, "0 0 16 16")}<span>{name.trim().toLowerCase() || "your article"}</span></div>
+          <div className={`seo-res${draft.index ? "" : " off"}`}>
+            <div className="ps-top">
+              <span className="gp-fav">{ini}</span>
+              <span className="ps-site"><b>{site.name}</b><span>{url}</span></span>
+            </div>
+            <div className="seo-rt">{T}</div>
+            <div className="seo-rd">{D}</div>
+          </div>
+          <p className="seo-note" hidden={draft.index}>This page is hidden from Google. People with the link can still open it.</p>
+        </div>
+        <div className="seo-fields">
+          <div className="pf-field">
+            <div className="seo-lr">
+              <label htmlFor="ar-seo-title">Meta title</label>
+              <span className={draft.title.length > SEO_T ? "over" : ""}>{draft.title.length} / {SEO_T}</span>
+            </div>
+            <input
+              className="pf-input"
+              id="ar-seo-title"
+              autoComplete="off"
+              placeholder="5 Essential Tips for Healthy Broiler Farming"
+              value={draft.title}
+              onChange={(e) => setDraft((s) => ({ ...s, title: e.target.value, auto: { ...s.auto, title: false } }))}
+            />
+            <div className="seo-meter"><i className={draft.title.length > SEO_T ? "over" : ""} style={{ width: `${Math.min(100, (draft.title.length / SEO_T) * 100)}%` }} /></div>
+          </div>
+          <div className="pf-field">
+            <div className="seo-lr">
+              <label htmlFor="ar-seo-meta">Meta description</label>
+              <span className={draft.meta.length > SEO_D ? "over" : ""}>{draft.meta.length} / {SEO_D}</span>
+            </div>
+            <textarea
+              className="pf-input"
+              id="ar-seo-meta"
+              placeholder="Learn practical biosecurity, feed scheduling, and natural gut hygiene methods for broilers."
+              value={draft.meta}
+              onChange={(e) => setDraft((s) => ({ ...s, meta: e.target.value, auto: { ...s.auto, meta: false } }))}
+            />
+            <div className="seo-meter"><i className={draft.meta.length > SEO_D ? "over" : ""} style={{ width: `${Math.min(100, (draft.meta.length / SEO_D) * 100)}%` }} /></div>
+          </div>
+          <div className="sx-list">
+            <div className="sx">
+              <button type="button" className="sx-row" aria-expanded={slugOpen} aria-controls="ar-sx-slug" onClick={() => setSlugOpen((v) => !v)}>
+                <span className="sx-k">URL slug</span>
+                <span className="sx-v">{domain + (slugPathVal ? "/" + slugPathVal.replace(/^\/+/, "") : "")}</span>
+                <span className="sx-act">{slugOpen ? "Done" : "Edit"}</span>
+              </button>
+              <div className="sx-body" id="ar-sx-slug" hidden={!slugOpen}>
+                <label className="sr-only" htmlFor="ar-seo-slug">URL slug</label>
+                <div className="pf-box">
+                  <span className="seo-dom">{domain}</span>
+                  <input id="ar-seo-slug" autoComplete="off" spellCheck={false} placeholder="/blog/5-tips-raising-broilers" value={draft.slug} onChange={(e) => setDraft((s) => ({ ...s, slug: e.target.value }))} />
+                </div>
+              </div>
+            </div>
+            <div className="sx">
+              <button type="button" className="sx-row" aria-expanded={ogOpen} aria-controls="ar-sx-og" onClick={() => setOgOpen((v) => !v)}>
+                <span className="sx-k">Social share image</span>
+                <span className="sx-v">
+                  <span className="sx-thumb">{ogImg ? <img src={ogImg} alt="" /> : null}</span>
+                  {useImg ? (img ? "Featured banner image" : "Featured banner image (none added yet)") : og ? "Custom image" : "No image yet"}
+                </span>
+                <span className="sx-act">{ogOpen ? "Done" : "Change"}</span>
+              </button>
+              <div className="sx-body" id="ar-sx-og" hidden={!ogOpen}>
+                <label className="ar-og-chk">
+                  <input type="checkbox" checked={useImg} onChange={(e) => setDraft((s) => ({ ...s, ogUse: e.target.checked }))} />
+                  {" "}Use featured banner image for WhatsApp/Social
+                </label>
+                <div className="ar-og-own" hidden={useImg}>
+                  <button type="button" className="ps-edit" onClick={() => ogFileRef.current?.click()}>Upload a different image</button>
+                  <button type="button" className="btn-text" hidden={!og} onClick={() => setOg(null)}>Remove</button>
+                  <input type="file" accept="image/png,image/jpeg,image/webp" hidden ref={ogFileRef} onChange={(e) => { readOg(e.target.files?.[0]); e.target.value = ""; }} />
+                </div>
+                <div className="ar-og" aria-label="Social share preview">
+                  <div className="ar-og-img">{ogImg ? <img src={ogImg} alt="" /> : <span>{useImg ? "Add a featured banner image to the article" : "Upload an image for social sharing"}</span>}</div>
+                  <div className="ar-og-txt">
+                    <small>{domain.toUpperCase()}</small>
+                    <b>{T}</b>
+                    <span>{D}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <label className="sx-row seo-switch" title="Hidden pages still work for people who have the link.">
+              <span className="sx-k">Show on search engines</span>
+              <span className="sx-v">{draft.index ? "Visible on Google" : "Hidden from Google"}</span>
+              <input type="checkbox" role="switch" checked={draft.index} onChange={(e) => setDraft((s) => ({ ...s, index: e.target.checked }))} />
+            </label>
+          </div>
+        </div>
+      </div>
+      <div className="seo-foot">
+        <button
+          type="button"
+          className="btn-text"
+          onClick={() => {
+            setDraft((s) => ({ ...s, auto: { title: true, meta: true }, ogUse: true }));
+            setOg(null);
+          }}
+        >
+          Reset to auto-generated
+        </button>
+        <span className="seo-actions">
+          <button type="button" className="btn-outline pf-btn" onClick={() => { savedRef.current = false; ref.current?.close(); }}>Cancel</button>
+          <button type="button" className="btn-primary pf-btn" onClick={() => { savedRef.current = true; ref.current?.close(); }}>Save changes</button>
+        </span>
+      </div>
     </dialog>
   );
 }
@@ -3794,7 +5065,8 @@ const META_T = 60;
 const META_D = 300;
 
 export type Branding = { siteName: string; favicon: string | null; metaTitle: string; metaDesc: string };
-export type Pixels = { ga: string; fb: string; code: string };
+export type Pixels = { ga: string; fb: string; code: string; extra: string[]; vals: Record<string, string>; on: Record<string, boolean>; saved: number | null };
+
 
 /* brandingOf(s) / pixelsOf(s) — seeded defaults from the prototype. */
 export function generateBranding(site: SiteLite & { name: string }): Branding {
@@ -3807,7 +5079,16 @@ export function generateBranding(site: SiteLite & { name: string }): Branding {
   };
 }
 export function generatePixels(site: SiteLite): Pixels {
-  return { ga: "", fb: isShopSite(site) ? "123456789012345" : "", code: "" };
+  const fb = isShopSite(site) ? "123456789012345" : "";
+  return {
+    ga: "",
+    fb,
+    code: "",
+    extra: ["ga", "fb"],
+    vals: { ga: "", fb, code: "" },
+    on: { ga: true, fb: true, code: true },
+    saved: fb ? Date.now() - 6 * 864e5 : null,
+  };
 }
 
 const I_IMG_UP = (
@@ -4054,13 +5335,240 @@ function BrandingPanel({
 
 /* -------------------------------------------------- Analytics & Pixels panel */
 
-const PX_RULES = {
-  ga: { re: /^G-[A-Z0-9]{6,12}$/, msg: "A Measurement ID looks like G-XXXXXXXXXX (G, a dash, then letters and numbers)." },
-  fb: { re: /^\d{15,16}$/, msg: "A Pixel ID is 15 or 16 digits, numbers only." },
+const pxUpAZ = (v: string) => v.toUpperCase().replace(/[^A-Z0-9-]/g, "");
+const pxDigits = (v: string) => v.replace(/\D/g, "");
+const pxLowAZ = (v: string) => v.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+type PxTool = {
+  k: string;
+  name: string;
+  g: string;
+  desc: string;
+  label: string;
+  ph: string;
+  mode: "text" | "numeric";
+  help?: string;
+  icon?: ReactNode;
+  mark?: string;
+  c?: string;
+  tc?: string;
+  re: RegExp;
+  msg: string;
+  clean: (v: string) => string;
 };
+
+/* Tools a site owner can add from "Add tracking tool". Each one only needs an ID; the platform writes the code. */
+const PX_TOOLS: PxTool[] = [
+  { k: "ga", name: "Google Analytics", icon: I_GA, g: "Analytics", desc: "See visitors, traffic sources and top pages.", label: "Measurement ID", ph: "G-XXXXXXXXXX", mode: "text", help: "", re: /^G-[A-Z0-9]{6,12}$/, msg: "A Measurement ID looks like G-XXXXXXXXXX (G, a dash, then letters and numbers).", clean: pxUpAZ },
+  { k: "fb", name: "Facebook / Meta Pixel", icon: I_FB, g: "Ad pixels", desc: "Measure results from Facebook and Instagram ads.", label: "Pixel ID", ph: "123456789012345", mode: "numeric", help: "", re: /^\d{15,16}$/, msg: "A Pixel ID is 15 or 16 digits, numbers only.", clean: pxDigits },
+  { k: "tt", name: "TikTok Pixel", mark: "TT", c: "#161616", g: "Ad pixels", desc: "Measure sales and sign-ups from TikTok ads.", label: "Pixel ID", ph: "CABCD1234EFGH5678IJK", mode: "text", help: "Find it in TikTok Ads Manager → Tools → Events → Web events.", re: /^[A-Z0-9]{20}$/, msg: "A TikTok Pixel ID is 20 letters and numbers.", clean: (v) => v.toUpperCase().replace(/[^A-Z0-9]/g, "") },
+  { k: "gads", name: "Google Ads", mark: "Ads", c: "#1a73e8", g: "Ad pixels", desc: "Track conversions from Google ad campaigns.", label: "Conversion ID", ph: "AW-123456789", mode: "text", help: "Find it in Google Ads → Goals → Conversions → your conversion → Tag setup.", re: /^AW-\d{9,11}$/, msg: "A Conversion ID looks like AW-123456789 (AW, a dash, then 9–11 digits).", clean: pxUpAZ },
+  { k: "snap", name: "Snapchat Pixel", mark: "SC", c: "#fffc00", tc: "#000", g: "Ad pixels", desc: "Measure results from Snapchat ads.", label: "Pixel ID", ph: "a1b2c3d4-e5f6-7890-abcd-ef1234567890", mode: "text", help: "Find it in Snapchat Ads Manager → Events Manager → your pixel.", re: /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i, msg: "A Snapchat Pixel ID looks like a1b2c3d4-e5f6-7890-abcd-ef1234567890.", clean: (v) => v.toLowerCase().replace(/[^a-f0-9-]/g, "") },
+  { k: "pin", name: "Pinterest Tag", mark: "Pi", c: "#c8102e", g: "Ad pixels", desc: "Track checkouts and sign-ups from Pinterest ads.", label: "Tag ID", ph: "2612345678901", mode: "numeric", help: "Find it in Pinterest Ads → Conversions → Tag manager.", re: /^\d{13}$/, msg: "A Pinterest Tag ID is 13 digits, numbers only.", clean: pxDigits },
+  { k: "li", name: "LinkedIn Insight Tag", mark: "in", c: "#0a66c2", g: "Ad pixels", desc: "Measure LinkedIn ads and see who visits.", label: "Partner ID", ph: "1234567", mode: "numeric", help: "Find it in LinkedIn Campaign Manager → Analyze → Insight Tag.", re: /^\d{5,8}$/, msg: "A LinkedIn Partner ID is 5 to 8 digits.", clean: pxDigits },
+  { k: "xp", name: "X (Twitter) Pixel", mark: "X", c: "#161616", g: "Ad pixels", desc: "Measure results from X ads.", label: "Pixel ID", ph: "o1abc", mode: "text", help: "Find it in X Ads Manager → Tools → Events manager.", re: /^[a-z0-9]{5,6}$/, msg: "An X Pixel ID is 5 or 6 letters and numbers, e.g. o1abc.", clean: pxLowAZ },
+  { k: "gtm", name: "Google Tag Manager", mark: "GTM", c: "#2a6fdb", g: "Tag managers", desc: "Manage all your tags from one Google container.", label: "Container ID", ph: "GTM-XXXXXXX", mode: "text", help: "Find it at the top of your Google Tag Manager workspace.", re: /^GTM-[A-Z0-9]{4,9}$/, msg: "A Container ID looks like GTM-XXXXXXX.", clean: pxUpAZ },
+  { k: "clarity", name: "Microsoft Clarity", mark: "MC", c: "#5c2d91", g: "Heatmaps & recordings", desc: "Free heatmaps and session recordings.", label: "Project ID", ph: "abcd1234ef", mode: "text", help: "Find it in Clarity → Settings → Overview.", re: /^[a-z0-9]{8,12}$/, msg: "A Clarity Project ID is 8 to 12 letters and numbers.", clean: pxLowAZ },
+  { k: "hj", name: "Hotjar", mark: "HJ", c: "#e8452c", g: "Heatmaps & recordings", desc: "Heatmaps, recordings and feedback polls.", label: "Site ID", ph: "1234567", mode: "numeric", help: "Find it in Hotjar → Sites & Organizations.", re: /^\d{6,8}$/, msg: "A Hotjar Site ID is 6 to 8 digits.", clean: pxDigits },
+  { k: "gsc", name: "Google Search Console", mark: "GSC", c: "#188038", g: "Search & verification", desc: "Verify your site and see how it shows on Google.", label: "Verification code", ph: "aBcD1234efGH5678", mode: "text", help: 'In Search Console pick "HTML tag" verification. Paste the whole tag or just the code inside content="…".', re: /^[A-Za-z0-9_-]{20,64}$/, msg: 'Paste the code from the HTML tag, the part inside content="…".', clean: (v) => { const m = v.match(/content=["']([^"']+)["']/i); return (m ? m[1] : v).replace(/[^A-Za-z0-9_-]/g, ""); } },
+];
+const PX_X: Record<string, PxTool> = Object.fromEntries(PX_TOOLS.map((t) => [t.k, t]));
+
+/* Custom Header Code Injection is built but switched off for now. Set to true to bring it back. */
+const PX_CODE_ON_FLAG = false;
+
 const codeSnippet = (c: string) => {
   const line = (c || "").split("\n").map((x) => x.trim()).find(Boolean);
-  return line || "...custom tracking script...";
+  return line || "No custom code yet";
+};
+
+const pxChip = (val: string, on: boolean) =>
+  !val ? "Not set up" : on ? "Active" : "Paused";
+const pxChipCls = (val: string, on: boolean) =>
+  !val ? "px-chip" : on ? "px-chip on" : "px-chip off";
+
+const I_PLUS_SM = (
+  <svg width="13" height="13" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+    <path d="M9 3.5v11M3.5 9h11" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+  </svg>
+);
+const I_PLUS_15 = (
+  <svg width="15" height="15" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+    <path d="M9 3.5v11M3.5 9h11" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+  </svg>
+);
+const I_TRASH = (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path d="M2.5 4.5h11M6 4.5V3h4v1.5M4 4.5l.7 8.6c.05.5.45.9.95.9h4.7c.5 0 .9-.4.95-.9L12 4.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+function PxMark({ t }: { t: PxTool }) {
+  if (t.icon) return <span className="px-mark ic" aria-hidden="true">{t.icon}</span>;
+  return (
+    <span
+      className={`px-mark${(t.mark || "").length > 2 ? " sm" : ""}`}
+      style={{ ["--mk" as string]: t.c, ["--mt" as string]: t.tc || "#fff" }}
+      aria-hidden="true"
+    >
+      {t.mark}
+    </span>
+  );
+}
+
+function PxAddDialog({
+  open,
+  extra,
+  onClose,
+  onAdd,
+}: {
+  open: boolean;
+  extra: string[];
+  onClose: () => void;
+  onAdd: (k: string) => void;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const closingRef = useRef(false);
+  const qRef = useRef<HTMLInputElement>(null);
+  const [q, setQ] = useState("");
+  useEffect(() => {
+    const d = ref.current;
+    if (!d || !open) return;
+    setQ("");
+    if (!d.open) d.showModal();
+    window.setTimeout(() => qRef.current?.focus(), 0);
+    return () => {
+      if (d.open) closingRef.current = true;
+      d.close();
+    };
+  }, [open]);
+  const handleClose = () => {
+    if (closingRef.current) {
+      closingRef.current = false;
+      return;
+    }
+    onClose();
+  };
+  const query = q.trim().toLowerCase();
+  const groups = Array.from(new Set(PX_TOOLS.map((t) => t.g)))
+    .map((g) => ({ g, items: PX_TOOLS.filter((t) => t.g === g && (!query || `${t.name} ${t.desc} ${t.g}`.toLowerCase().includes(query))) }))
+    .filter((x) => x.items.length > 0);
+  const hits = groups.reduce((n, x) => n + x.items.length, 0);
+  return (
+    <dialog
+      className="modal modal-domain modal-pxadd"
+      ref={ref}
+      aria-labelledby="pxa-title"
+      aria-describedby="pxa-sub"
+      onClose={handleClose}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) ref.current?.close();
+      }}
+      hidden={!open}
+    >
+      <div className="dm-in pxa-in">
+        <div className="dm-head">
+          <span className="dm-ic">{I_GA}</span>
+          <div>
+            <h2 id="pxa-title">Add a tracking tool</h2>
+            <p id="pxa-sub">Pick the tool you use. You&apos;ll only need its ID, and we add the tracking code to every page for you.</p>
+          </div>
+          <button type="button" className="icon-btn" aria-label="Close" onClick={() => ref.current?.close()}>
+            {icon("i-close", 18, 18, "0 0 16 16")}
+          </button>
+        </div>
+        <div className="pxa-search">
+          {icon("i-search", 16, 16, "0 0 16 16")}
+          <label className="sr-only" htmlFor="pxa-q">Search tracking tools</label>
+          <input
+            id="pxa-q"
+            ref={qRef}
+            type="search"
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="Search tools, e.g. TikTok"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+        </div>
+        <div className="pxa-list" aria-live="polite">
+          {hits ? (
+            groups.map(({ g, items }) => (
+              <Fragment key={g}>
+                <p className="pxa-g">{g}</p>
+                <ul>
+                  {items.map((t) => {
+                    const added = extra.includes(t.k);
+                    return (
+                      <li key={t.k}>
+                        <button
+                          type="button"
+                          className="pxa-item"
+                          disabled={added}
+                          onClick={() => {
+                            if (added) return;
+                            ref.current?.close();
+                            onAdd(t.k);
+                          }}
+                        >
+                          <PxMark t={t} />
+                          <span className="t">
+                            <b>{t.name}</b>
+                            <small>{t.desc}</small>
+                          </span>
+                          <span className="st">{added ? <>{TICK}Added</> : <>{I_PLUS_SM}Add</>}</span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </Fragment>
+            ))
+          ) : (
+            <p className="pxa-empty">“{q.trim()}” isn&apos;t in the list yet.</p>
+          )}
+        </div>
+        <button
+          type="button"
+          className="pxa-other"
+          hidden={!PX_CODE_ON_FLAG}
+          onClick={() => {
+            ref.current?.close();
+            onAdd("code");
+          }}
+        >
+          <span className="px-ic code">{I_CODE}</span>
+          <span className="t">
+            <b>Other tool</b>
+            <small>Not listed? Paste the tool&apos;s code into Custom Header Code Injection.</small>
+          </span>
+          <span className="st">Paste code</span>
+        </button>
+        <div className="dm-foot pxa-foot">
+          <button type="button" className="btn-outline dm-btn" onClick={() => ref.current?.close()}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </dialog>
+  );
+}
+
+type PxDraft = { extra: string[]; vals: Record<string, string>; on: Record<string, boolean> };
+
+const pxDraftOf = (p: Pixels): PxDraft => {
+  const extra = [...(p.extra && p.extra.length ? p.extra : ["ga", "fb"])];
+  const vals: Record<string, string> = {};
+  const on: Record<string, boolean> = {};
+  [...extra, "code"].forEach((k) => {
+    if (p.vals && p.vals[k] !== undefined) vals[k] = p.vals[k];
+    else if (k === "ga") vals[k] = p.ga || "";
+    else if (k === "fb") vals[k] = p.fb || "";
+    else if (k === "code") vals[k] = p.code || "";
+    else vals[k] = "";
+    on[k] = p.on && p.on[k] !== undefined ? p.on[k] : true;
+  });
+  return { extra, vals, on };
 };
 
 function PixelsPanel({
@@ -4074,15 +5582,33 @@ function PixelsPanel({
   onSave: (updater: (p: Pixels) => Pixels) => void;
   showToast: (text: string) => void;
 }) {
-  const [ga, setGa] = useState(pixels.ga);
-  const [fb, setFb] = useState(pixels.fb);
-  const [code, setCode] = useState(pixels.code);
-  const [errs, setErrs] = useState<{ ga: string; fb: string }>({ ga: "", fb: "" });
+  const [add, setAdd] = useState(false);
+  const [draft, setDraft] = useState<PxDraft>(() => pxDraftOf(pixels));
+  const [errs, setErrs] = useState<Record<string, string>>({});
   const [copied, setCopied] = useState<string | null>(null);
   const [codeOpen, setCodeOpen] = useState(false);
-  const gaRef = useRef<HTMLInputElement>(null);
-  const fbRef = useRef<HTMLInputElement>(null);
   const codeRef = useRef<HTMLTextAreaElement>(null);
+
+  /* Unsaved edits survive re-renders (adding/removing a tool) but are dropped
+     when the panel opens fresh. */
+  useEffect(() => {
+    setDraft(pxDraftOf(pixels));
+    setErrs({});
+  }, [pixels]);
+
+  const savedDraft = useMemo(() => JSON.stringify(pxDraftOf(pixels)), [pixels]);
+  const dirty = JSON.stringify(draft) !== savedDraft;
+  const code = draft.vals.code || "";
+  const hasValue = [...draft.extra, "code"].some((k) => (draft.vals[k] || "").trim());
+  const note = dirty
+    ? "You have unsaved changes."
+    : !hasValue
+      ? PX_CODE_ON_FLAG
+        ? "No tracking yet. Add an ID or a script above, then save."
+        : "No tracking yet. Add a tracking tool above, then save."
+      : pixels.saved
+        ? `All changes saved · ${timeAgo(pixels.saved).toLowerCase()}.`
+        : "All changes saved.";
 
   const copy = (text: string, key: string) => {
     const done = () => {
@@ -4097,167 +5623,424 @@ function PixelsPanel({
       ta.select();
       try {
         document.execCommand("copy");
-        done();
       } catch {
-        showToast(text);
+        /* noop */
       }
+      done();
       ta.remove();
     };
     if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(done, fallback);
     else fallback();
   };
 
-  const openCode = () => {
-    setCodeOpen(true);
-    requestAnimationFrame(() => codeRef.current?.focus());
+  const focusRow = (k: string) => {
+    window.setTimeout(() => {
+      const el = document.getElementById(`px-${k}`) as HTMLInputElement | null;
+      el?.closest(".px-row")?.scrollIntoView({ block: "nearest" });
+      el?.focus();
+    }, 0);
   };
 
   const save = () => {
-    let first: "ga" | "fb" | null = null;
-    const next = { ga: "", fb: "" };
-    (Object.keys(PX_RULES) as ("ga" | "fb")[]).forEach((k) => {
-      const v = (k === "ga" ? ga : fb).trim();
-      if (v && !PX_RULES[k].re.test(v)) {
-        next[k] = PX_RULES[k].msg;
+    const next: Record<string, string> = {};
+    let first: string | null = null;
+    draft.extra.forEach((k) => {
+      const t = PX_X[k];
+      const v = (draft.vals[k] || "").trim();
+      if (t && v && !t.re.test(v)) {
+        next[k] = t.msg;
         first = first ?? k;
       }
     });
     setErrs(next);
     if (first) {
-      (first === "ga" ? gaRef : fbRef).current?.focus();
+      focusRow(first);
       return;
     }
     const c = code.trim();
-    if (/<script\b/i.test(c) && !/<\/script>/i.test(c)) {
-      if (codeOpen) codeRef.current?.focus();
-      else openCode();
+    if (PX_CODE_ON_FLAG && /<script\b/i.test(c) && !/<\/script>/i.test(c)) {
+      setCodeOpen(true);
       showToast("Your custom code has an opening <script> tag with no closing </script>.");
       return;
     }
-    onSave(() => ({ ga: ga.trim(), fb: fb.trim(), code: c }));
-    const n = [ga.trim(), fb.trim(), c].filter(Boolean).length;
-    showToast(n ? `Tracking saved. ${n} ${n === 1 ? "tool is" : "tools are"} active on ${site.name}.` : "Tracking saved. No tracking tools are active.");
+    onSave((p) => ({
+      ...p,
+      ga: draft.vals.ga || "",
+      fb: draft.vals.fb || "",
+      code: c,
+      extra: [...draft.extra],
+      vals: { ...draft.vals },
+      on: { ...draft.on },
+      saved: Date.now(),
+    }));
+    const n = [...draft.extra, "code"].filter((k) => draft.on[k] && (draft.vals[k] || "").trim()).length;
+    showToast(
+      n
+        ? `Tracking saved. ${n} ${n === 1 ? "tool is" : "tools are"} active on ${site.name}.`
+        : "Tracking saved. No tracking tools are active.",
+    );
+  };
+
+  const discard = () => {
+    setDraft(pxDraftOf(pixels));
+    setErrs({});
+    showToast("Changes discarded");
+  };
+
+  const remove = (t: PxTool) => {
+    setDraft((d) => {
+      const extra = d.extra.filter((x) => x !== t.k);
+      const vals = { ...d.vals };
+      delete vals[t.k];
+      const on = { ...d.on };
+      delete on[t.k];
+      return { extra, vals, on };
+    });
+    setErrs((s) => ({ ...s, [t.k]: "" }));
+    showToast(`${t.name} removed. Save to apply.`);
+  };
+
+  const addTool = (k: string) => {
+    if (k === "code") {
+      setCodeOpen(true);
+      focusRow("code");
+      return;
+    }
+    setDraft((d) =>
+      d.extra.includes(k)
+        ? d
+        : { extra: [...d.extra, k], vals: { ...d.vals, [k]: "" }, on: { ...d.on, [k]: true } },
+    );
+    focusRow(k);
+  };
+
+  const setVal = (k: string, value: string) => {
+    setDraft((d) => ({ ...d, vals: { ...d.vals, [k]: value } }));
+    setErrs((s) => ({ ...s, [k]: "" }));
   };
 
   return (
     <>
       <h2 className="ss-h br-h">Analytics &amp; Pixels</h2>
-      <p className="px-sub">Connect your tracking tools and add custom scripts to monitor your site&apos;s performance and behaviour.</p>
+      <p className="px-sub">
+        Connect your tracking tools and add custom scripts to monitor your site&apos;s performance and behaviour.
+        Tracking only runs on the published site, not in previews.
+      </p>
       <div className="px-list">
-        <div className="px-row tint">
-          <span className="px-ic">{I_GA}</span>
-          <div>
-            <strong>Google Analytics</strong>
-            <span className="px-id">
-              <label htmlFor="px-ga">Measurement ID:</label>
-              <span className="px-br">[</span>{" "}
-              <input
-                ref={gaRef}
-                className="px-in"
-                id="px-ga"
-                inputMode="text"
-                autoComplete="off"
-                spellCheck={false}
-                placeholder="G-XXXXXXXXXX"
-                value={ga}
-                aria-describedby="px-ga-err"
-                aria-invalid={errs.ga ? true : undefined}
-                onChange={(e) => {
-                  setGa(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, ""));
-                  setErrs((s) => ({ ...s, ga: "" }));
-                }}
-              />{" "}
-              <span className="px-br">]</span>
-            </span>
-            <p className="px-err" id="px-ga-err" hidden={!errs.ga}>{errs.ga}</p>
+        {draft.extra.map((k, i) => {
+          const t = PX_X[k];
+          if (!t) return null;
+          const val = draft.vals[k] || "";
+          const isOn = draft.on[k] !== false;
+          const err = errs[k];
+          return (
+            <div className={`px-row${i % 2 ? "" : " tint"}`} key={k}>
+              <span className="px-ic">
+                <PxMark t={t} />
+              </span>
+              <div>
+                <span className="px-head">
+                  <strong>{t.name}</strong>
+                  <span id={`px-${k}-chip`} className={pxChipCls(val, isOn && !!val)}>
+                    {pxChip(val, isOn && !!val)}
+                  </span>
+                </span>
+                <span className="px-id">
+                  <label htmlFor={`px-${k}`}>{t.label}</label>
+                  <input
+                    className="px-in"
+                    id={`px-${k}`}
+                    inputMode={t.mode}
+                    autoComplete="off"
+                    spellCheck={false}
+                    placeholder={`e.g. ${t.ph}`}
+                    value={val}
+                    aria-invalid={err ? true : undefined}
+                    aria-describedby={`px-${k}-err`}
+                    onChange={(e) => setVal(k, t.clean(e.target.value))}
+                  />
+                </span>
+                <p className="px-err" id={`px-${k}-err`} hidden={!err}>
+                  {err}
+                </p>
+              </div>
+              <div className="px-acts">
+                <label className="px-switch" hidden={!val}>
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    disabled={!val}
+                    checked={isOn}
+                    aria-label={`Load ${t.name} on this site`}
+                    onChange={(e) => setDraft((d) => ({ ...d, on: { ...d.on, [k]: e.target.checked } }))}
+                  />
+                  On
+                </label>
+                <button
+                  type="button"
+                  className={`px-copy${copied === k ? " done" : ""}`}
+                  hidden={!val}
+                  onClick={() => val.trim() && copy(val.trim(), k)}
+                >
+                  {copied === k ? (
+                    <>
+                      {TICK}Copied
+                    </>
+                  ) : (
+                    <>
+                      {COPY_IC}Copy ID
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  className="px-remove"
+                  aria-label={`Remove ${t.name}`}
+                  title={`Remove ${t.name}`}
+                  onClick={() => remove(t)}
+                >
+                  {I_TRASH}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+        <div className="px-row px-addrow">
+          <span className="px-ic">
+            <span className="px-plus">{I_PLUS_15}</span>
+          </span>
+          <div className="px-addbox">
+            <button type="button" className="px-add" id="px-add" aria-haspopup="dialog" onClick={() => setAdd(true)}>
+              {I_PLUS_15}Add tracking tool
+            </button>
           </div>
-          <button
-            type="button"
-            className={`px-copy${copied === "ga" ? " done" : ""}`}
-            disabled={!ga.trim()}
-            onClick={() => {
-              const v = ga.trim();
-              if (v) copy(v, "ga");
-            }}
-          >
-            {copied === "ga" ? <>{TICK}Copied</> : <>{COPY_IC}Copy ID</>}
-          </button>
         </div>
-        <div className="px-row">
-          <span className="px-ic">{I_FB}</span>
-          <div>
-            <strong>Facebook / Meta Pixel</strong>
-            <span className="px-id">
-              <label htmlFor="px-fb">Pixel ID:</label>
-              <span className="px-br">[</span>{" "}
-              <input
-                ref={fbRef}
-                className="px-in"
-                id="px-fb"
-                inputMode="numeric"
-                autoComplete="off"
+        {PX_CODE_ON_FLAG && (
+          <div className="px-row tint px-coderow">
+            <span className="px-ic code">{I_CODE}</span>
+            <div>
+              <span className="px-head">
+                <strong>Custom Header Code Injection</strong>
+                <span className={pxChipCls(code, draft.on.code !== false)}>{pxChip(code, draft.on.code !== false)}</span>
+              </span>
+              <span className="px-snip">
+                <code>{codeSnippet(code)}</code>
+                <button
+                  type="button"
+                  className="btn-text"
+                  aria-expanded={codeOpen}
+                  onClick={() => setCodeOpen((v) => !v)}
+                >
+                  {codeOpen ? "Close editor" : code.trim() ? "Edit code" : "Add script"}
+                </button>
+              </span>
+            </div>
+            <div className="px-acts">
+              <label className="px-switch" hidden={!code}>
+                <input
+                  type="checkbox"
+                  role="switch"
+                  disabled={!code}
+                  checked={draft.on.code !== false}
+                  aria-label="Load custom code on this site"
+                  onChange={(e) => setDraft((d) => ({ ...d, on: { ...d.on, code: e.target.checked } }))}
+                />
+                On
+              </label>
+            </div>
+            {codeOpen && (
+              <textarea
+                ref={codeRef}
+                className="px-code"
                 spellCheck={false}
-                placeholder="123456789012345"
-                value={fb}
-                aria-describedby="px-fb-err"
-                aria-invalid={errs.fb ? true : undefined}
-                onChange={(e) => {
-                  setFb(e.target.value.replace(/\D/g, ""));
-                  setErrs((s) => ({ ...s, fb: "" }));
-                }}
-              />{" "}
-              <span className="px-br">]</span>
-            </span>
-            <p className="px-err" id="px-fb-err" hidden={!errs.fb}>{errs.fb}</p>
+                placeholder={"<!-- Paste scripts here. They load in the <head> of every page. -->"}
+                value={code}
+                onChange={(e) => setVal("code", e.target.value)}
+              />
+            )}
           </div>
-          <button
-            type="button"
-            className={`px-copy${copied === "fb" ? " done" : ""}`}
-            disabled={!fb.trim()}
-            onClick={() => {
-              const v = fb.trim();
-              if (v) copy(v, "fb");
-            }}
-          >
-            {copied === "fb" ? <>{TICK}Copied</> : <>{COPY_IC}Copy ID</>}
-          </button>
-        </div>
-        <div className="px-row tint">
-          <span className="px-ic code">{I_CODE}</span>
-          <div>
-            <strong>Custom Header Code Injection</strong>
-            <span className="px-snip">
-              <code id="px-snip">{codeSnippet(code)}</code>
-              <button
-                type="button"
-                className="btn-text"
-                id="px-code-toggle"
-                aria-expanded={codeOpen}
-                aria-controls="px-code"
-                onClick={() => {
-                  if (codeOpen) setCodeOpen(false);
-                  else openCode();
-                }}
-              >
-                {codeOpen ? "Hide editor" : code.trim() ? "Edit" : "Add script"}
-              </button>
-            </span>
+        )}
+        <div className="px-bar">
+          <p className={`note${dirty ? " dirty" : ""}`} aria-live="polite">
+            {note}
+          </p>
+          <div className="row">
+            <button type="button" className="btn-light" hidden={!dirty} onClick={discard}>
+              Discard
+            </button>
+            <button type="button" className="btn-dark px-save" disabled={!dirty} onClick={save}>
+              {I_SAVE}Save Tracking Configuration
+            </button>
           </div>
-          <button type="button" className="btn-dark px-save" id="px-save" onClick={save}>{I_SAVE}Save Tracking Configuration</button>
-          <label className="sr-only" htmlFor="px-code">Custom code added to the head of every page</label>
-          <textarea
-            ref={codeRef}
-            className="px-code"
-            id="px-code"
-            hidden={!codeOpen}
-            spellCheck={false}
-            placeholder={"<!-- Paste scripts here. They load in the <head> of every page. -->"}
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-          />
         </div>
       </div>
+      <PxAddDialog open={add} extra={draft.extra} onClose={() => setAdd(false)} onAdd={addTool} />
     </>
+  );
+}
+
+/* -------------------------------------------------- Danger Zone */
+
+function DangerPanel({
+  status,
+  live,
+  workspaceName,
+  otherWorkspaces,
+  counts,
+  onUnpublish,
+  onTransfer,
+  onDelete,
+  onCreateWorkspace,
+}: {
+  status: "ready" | "setup" | "frozen" | "disabled";
+  live: boolean;
+  workspaceName: string;
+  otherWorkspaces: Array<{ id: string; name: string; sites: number; members: number }>;
+  counts: { pages: number; articles: number; products: number; orders: number };
+  onUnpublish: () => void;
+  onTransfer: (toId: string) => void;
+  onDelete: () => void;
+  onCreateWorkspace: () => void;
+}) {
+  const [show, setShow] = useState<null | "unpub" | "trans" | "del">(null);
+  const canDel = !live && status !== "ready" && status !== "setup";
+  return (
+    <>
+      <h2 className="ss-h br-h">Danger Zone</h2>
+      <p className="px-sub">Take irreversible actions. Unpublishing hides your site while keeping content. Deleting removes this site and its reference across workspaces.</p>
+      <div className="sdz">
+        <article className="sdz-card">
+          <header className="sdz-h">
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M8 1.5 1.3 13.5h13.4L8 1.5Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+              <path d="M8 6v3.5M8 11.5h0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+            <span>Unpublish Site</span>
+          </header>
+          <p>Take this site offline. All published pages, blog posts and the live URL will stop working. You can republish later.</p>
+          <ul className="sdz-list">
+            <li><b>Effect:</b> {live ? "Site becomes unpublished (hidden)" : "Already unpublished"}</li>
+            <li><b>Scope:</b> Content, pages and SEO remain in this workspace</li>
+          </ul>
+          <div className="sdz-act">
+            <button type="button" className="btn-outline sdz-btn" disabled={!live} onClick={() => setShow("unpub")}>
+              Unpublish Site
+            </button>
+          </div>
+        </article>
+        <article className="sdz-card">
+          <header className="sdz-h">
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M2 8v6h12V8M1.5 5h13V8h-13z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+              <path d="M8 5V2.5M6 4h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            </svg>
+            <span>Transfer Ownership</span>
+          </header>
+          <p>Move this site to another workspace you own or manage. The site’s content stays intact.</p>
+          <ul className="sdz-list">
+            <li><b>From:</b> {workspaceName}</li>
+            <li><b>To:</b> Choose a workspace below</li>
+          </ul>
+          <div className="sdz-act col">
+            {otherWorkspaces.length ? (
+              otherWorkspaces.map((w) => (
+                <button key={w.id} type="button" className="btn-outline sdz-btn block" onClick={() => setShow({ t: "trans", toId: w.id, toName: w.name } as any)}>
+                  Transfer to <b>{w.name}</b> <small>({w.sites} sites · {w.members} members)</small>
+                </button>
+              ))
+            ) : (
+              <button type="button" className="btn-outline sdz-btn block" onClick={onCreateWorkspace}>
+                Create new workspace
+              </button>
+            )}
+          </div>
+        </article>
+        <article className="sdz-card bad">
+          <header className="sdz-h">
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M2.5 3.5h11M6 3.5V2.5h4v1M3.5 5v8a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M6.5 7.5v4M9.5 7.5v4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            </svg>
+            <span>Delete Site</span>
+          </header>
+          <p>This will permanently remove this site from the system. This action cannot be undone.</p>
+          <ul className="sdz-list">
+            <li><b>Counts:</b> {counts.pages} pages, {counts.articles} articles, {counts.products} products, {counts.orders} orders</li>
+            <li><b>Requires:</b> Site unpublished and status not &quot;Ready&quot;/&quot;Setup&quot;</li>
+          </ul>
+          <div className="sdz-act">
+            <button type="button" className="btn-outline sdz-btn bad" disabled={!canDel} onClick={() => setShow("del")} title={canDel ? undefined : "Unpublish and ensure status allows deletion."}>
+              Delete Permanently
+            </button>
+          </div>
+        </article>
+      </div>
+      <SiteDangerDialog
+        kind={show === "unpub" ? "unpub" : show === "del" ? "del" : (show as any)?.t === "trans" ? "trans" : null}
+        toName={(show as any)?.toName}
+        onCancel={() => setShow(null)}
+        onConfirm={() => {
+          if (show === "unpub") onUnpublish();
+          if ((show as any)?.t === "trans") onTransfer((show as any).toId);
+          if (show === "del") onDelete();
+          setShow(null);
+        }}
+      />
+    </>
+  );
+}
+
+function SiteDangerDialog({
+  kind,
+  toName,
+  onCancel,
+  onConfirm,
+}: {
+  kind: "unpub" | "del" | "trans" | null;
+  toName?: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const closingRef = useRef(false);
+  useEffect(() => {
+    const d = ref.current;
+    if (!d) return;
+    if (!kind) return;
+    if (!d.open) d.showModal();
+    return () => {
+      if (d.open) closingRef.current = true;
+      d.close();
+    };
+  }, [kind]);
+  const handleClose = () => {
+    if (closingRef.current) {
+      closingRef.current = false;
+      return;
+    }
+    onCancel();
+  };
+  if (!kind) return null;
+  const t =
+    kind === "unpub" ? { title: "Unpublish Site", body: "Are you sure you want to unpublish this site? It will go offline for everyone.", ok: "Unpublish" } :
+    kind === "trans" ? { title: "Transfer Site", body: `Transfer this site to ${toName || "another workspace"}? The site stays intact but moves to the new workspace.`, ok: "Transfer" } :
+    { title: "Delete Site Permanently", body: "This action cannot be undone. All content and references for this site will be removed.", ok: "Delete Permanently" };
+  return (
+    <dialog className="modal modal-danger" ref={ref} aria-labelledby="sdz-title" onClose={handleClose} onClick={(e) => { if (e.target === e.currentTarget) ref.current?.close(); }} hidden={!kind}>
+      <div className="pf-head">
+        <div>
+          <h2 id="sdz-title">{t.title}</h2>
+          <p>{t.body}</p>
+        </div>
+        <button type="button" className="icon-btn" aria-label="Close" onClick={() => ref.current?.close()}>
+          {icon("i-close", 18, 18, "0 0 16 16")}
+        </button>
+      </div>
+      <div className="pf-foot">
+        <button type="button" className="btn-outline pf-btn" onClick={() => ref.current?.close()}>Cancel</button>
+        <button type="button" className={`btn-primary pf-btn${kind === "del" ? " bad" : ""}`} onClick={onConfirm}>{t.ok}</button>
+      </div>
+    </dialog>
   );
 }
 
@@ -4271,6 +6054,14 @@ export function SettingsView({
   pendingDomain,
   onConnect,
   onPending,
+  counts,
+  status,
+  workspaceName,
+  otherWorkspaces,
+  onUnpublish,
+  onTransfer,
+  onDelete,
+  onCreateWorkspace,
   onSaveBranding,
   onSavePixels,
   showToast,
@@ -4282,6 +6073,14 @@ export function SettingsView({
   pendingDomain: string;
   onConnect: (domain: string) => void;
   onPending: (domain: string) => void;
+  counts: { pages: number; articles: number; products: number; orders: number };
+  status: "ready" | "setup" | "frozen" | "disabled";
+  workspaceName: string;
+  otherWorkspaces: Array<{ id: string; name: string; sites: number; members: number }>;
+  onUnpublish: () => void;
+  onTransfer: (toId: string) => void;
+  onDelete: () => void;
+  onCreateWorkspace: () => void;
   onSaveBranding: (updater: (b: Branding) => Branding) => void;
   onSavePixels: (updater: (p: Pixels) => Pixels) => void;
   showToast: (text: string) => void;
@@ -4353,6 +6152,18 @@ export function SettingsView({
       </>
     ) : tab === "branding" ? (
       <BrandingPanel site={site} branding={branding} onSave={onSaveBranding} showToast={showToast} />
+    ) : tab === "danger" ? (
+      <DangerPanel
+        status={status}
+        live={d.live}
+        workspaceName={workspaceName}
+        otherWorkspaces={otherWorkspaces}
+        counts={counts}
+        onUnpublish={onUnpublish}
+        onTransfer={onTransfer}
+        onDelete={onDelete}
+        onCreateWorkspace={onCreateWorkspace}
+      />
     ) : tab === "pixels" ? (
       <PixelsPanel site={site} pixels={pixels} onSave={onSavePixels} showToast={showToast} />
     ) : (

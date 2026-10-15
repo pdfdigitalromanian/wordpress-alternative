@@ -5,6 +5,7 @@ import {
   AnalyticsView,
   CategoriesView,
   CheckoutView,
+  ContentView,
   generateBranding,
   generateCategories,
   generateCheckout,
@@ -12,10 +13,12 @@ import {
   generatePages,
   generatePixels,
   generateProducts,
+  generateArticles,
   OrdersView,
   ProductsView,
   SettingsView,
   WebsitePagesView,
+  type Article,
   type Branding,
   type Category,
   type Checkout,
@@ -122,7 +125,7 @@ const GEAR_13 = (
 
 /* SITE_VIEW_TITLES from render(): the per-view document titles and the
    sidebar labels the "coming soon" toast echoes. */
-const SITE_VIEW_TITLES: Record<string, string> = { overview: "Overview", pages: "Pages", products: "Products", orders: "Orders", categories: "Categories", checkout: "Checkout Settings", analytics: "Analytics", settings: "Site Settings" };
+const SITE_VIEW_TITLES: Record<string, string> = { overview: "Overview", pages: "Pages", content: "Content", products: "Products", orders: "Orders", categories: "Categories", checkout: "Checkout Settings", analytics: "Analytics", settings: "Site Settings" };
 const NAV_LABELS: Record<string, string> = {
   cms: "Content",
   media: "Media Library",
@@ -437,12 +440,17 @@ export default function Overview() {
   // Row data per site: generated on first visit, then kept in state so edits
   // survive moving between the three site views.
   const [pagesBySite, setPagesBySite] = useState<Record<string, WebPage[]>>({});
+  const [articlesBySite, setArticlesBySite] = useState<Record<string, Article[]>>({});
   const [productsBySite, setProductsBySite] = useState<Record<string, Product[]>>({});
   const [ordersBySite, setOrdersBySite] = useState<Record<string, Order[]>>({});
   const [categoriesBySite, setCategoriesBySite] = useState<Record<string, Category[]>>({});
   const [checkoutBySite, setCheckoutBySite] = useState<Record<string, Checkout>>({});
   const [brandingBySite, setBrandingBySite] = useState<Record<string, Branding>>({});
   const [pixelsBySite, setPixelsBySite] = useState<Record<string, Pixels>>({});
+  // Danger Zone: owner unpublished the site (live flips off) and/or moved it
+  // to another workspace or deleted it — local overrides on top of siteData().
+  const [unpublishedBySite, setUnpublishedBySite] = useState<Record<string, boolean>>({});
+  const [removedSiteIds, setRemovedSiteIds] = useState<Record<string, string>>({}); // siteId -> new workspace id ("deleted" if removed)
   // Domain connected from Site Settings, per site, so the topbar reflects it.
   const [domainBySite, setDomainBySite] = useState<Record<string, string>>({});
   // Domains entered in the DNS dialog but not verified yet, shown as "pending" on the tab.
@@ -464,13 +472,30 @@ export default function Overview() {
   }, []);
 
   const activeWorkspace = data.workspaces.find((w) => w.id === activeWorkspaceId) ?? data.workspaces[0];
-  const SITES = activeWorkspace?.sites ?? [];
+  // Sites moved away or deleted via the Danger Zone drop out of this
+  // workspace's list (client-side only; no backend change yet).
+  const SITES = (activeWorkspace?.sites ?? []).filter((s) => !removedSiteIds[s.id]);
   const activeSite = SITES.find((s) => s.id === activeSiteId);
-  const dashboard = useMemo(() => (activeSite ? siteData({ ...activeSite, domain: domainBySite[activeSite.id] }) : null), [activeSite, domainBySite]);
+  const dashboard = useMemo(
+    () =>
+      activeSite
+        ? siteData({
+            ...activeSite,
+            domain: domainBySite[activeSite.id],
+            // Owner unpublished via the Danger Zone: flip live off without a full reload.
+            ...(unpublishedBySite[activeSite.id] ? { status: "unpublished" as const } : {}),
+          })
+        : null,
+    [activeSite, domainBySite, unpublishedBySite],
+  );
 
   const sitePages: WebPage[] = useMemo(
     () => (activeSite ? (pagesBySite[activeSite.id] ?? generatePages(activeSite)) : []),
     [activeSite, pagesBySite],
+  );
+  const siteArticles: Article[] = useMemo(
+    () => (activeSite ? (articlesBySite[activeSite.id] ?? generateArticles(activeSite)) : []),
+    [activeSite, articlesBySite],
   );
   const siteProducts: Product[] = useMemo(
     () => (activeSite ? (productsBySite[activeSite.id] ?? generateProducts(activeSite)) : []),
@@ -500,6 +525,11 @@ export default function Overview() {
     if (!activeSite) return;
     const site = activeSite;
     setPagesBySite((m) => ({ ...m, [site.id]: updater(m[site.id] ?? generatePages(site)) }));
+  };
+  const setSiteArticles = (updater: (list: Article[]) => Article[]) => {
+    if (!activeSite) return;
+    const site = activeSite;
+    setArticlesBySite((m) => ({ ...m, [site.id]: updater(m[site.id] ?? generateArticles(site)) }));
   };
   const setSiteProducts = (updater: (list: Product[]) => Product[]) => {
     if (!activeSite) return;
@@ -824,10 +854,10 @@ export default function Overview() {
               </Link>
             </li>
             <li>
-              <a className="nav-link" href="/overview" data-site-nav="cms" onClick={inertNav("cms")}>
+              <Link className="nav-link" to="/overview/content" data-site-nav="cms" aria-current={siteView === "content" ? "page" : undefined} onClick={() => closeMenu()}>
                 {CMS_ICON}
                 Content
-              </a>
+              </Link>
             </li>
             <li>
               <a className="nav-link" href="/overview" data-site-nav="media" onClick={inertNav("media")}>
@@ -921,6 +951,8 @@ export default function Overview() {
               <NoSiteView title="E-Commerce / Store" sub="Manage your products, inventory, order lists, and payment channel toggles." hasWorkspace={!!activeWorkspace} />
             ) : siteView === "analytics" ? (
               <NoSiteView title="Site & Store Analytics" sub="Track your visitor traffic, conversion rates, and revenue performance." hasWorkspace={!!activeWorkspace} />
+            ) : siteView === "content" ? (
+              <NoSiteView title="Content" sub="Manage articles, farm updates, and resource guides." hasWorkspace={!!activeWorkspace} />
             ) : siteView === "settings" ? (
               <NoSiteView title="Site Settings" sub="Manage global domain connections, brand identity, tracking scripts, and site deletion." hasWorkspace={!!activeWorkspace} />
               ) : (
@@ -995,6 +1027,16 @@ export default function Overview() {
               />
             ) : siteView === "analytics" ? (
               <AnalyticsView key={activeSite.id} site={activeSite} showToast={showToast} />
+            ) : siteView === "content" ? (
+              <ContentView
+                key={activeSite.id}
+                site={activeSite}
+                d={dashboard}
+                articles={siteArticles}
+                setArticles={setSiteArticles}
+                showToast={showToast}
+                showToastAction={showToastAction}
+              />
             ) : siteView === "settings" ? (
               <SettingsView
                 key={activeSite.id}
@@ -1008,6 +1050,37 @@ export default function Overview() {
                 onSaveBranding={setSiteBranding}
                 onSavePixels={setSitePixels}
                 showToast={showToast}
+                counts={{
+                  pages: sitePages.length,
+                  articles: siteArticles.length,
+                  products: siteProducts.length,
+                  orders: siteOrders.length,
+                }}
+                status={(activeSite.status as "ready" | "setup" | "frozen" | "disabled") ?? "ready"}
+                workspaceName={activeWorkspace?.name ?? "This workspace"}
+                otherWorkspaces={data.workspaces
+                  .filter((w) => w.id !== activeWorkspace?.id)
+                  .map((w) => ({ id: w.id, name: w.name, sites: w.sites.length, members: w.members.length }))}
+                onUnpublish={() => {
+                  if (!activeSite) return;
+                  setUnpublishedBySite((m) => ({ ...m, [activeSite.id]: true }));
+                  showToast(`${activeSite.name} unpublished. It is offline until you publish again.`);
+                }}
+                onTransfer={(toId) => {
+                  if (!activeSite) return;
+                  setRemovedSiteIds((m) => ({ ...m, [activeSite.id]: toId }));
+                  showToast(`${activeSite.name} moved to another workspace.`);
+                  navigate("/workspace");
+                }}
+                onDelete={() => {
+                  if (!activeSite) return;
+                  setRemovedSiteIds((m) => ({ ...m, [activeSite.id]: "deleted" }));
+                  showToast(`${activeSite.name} deleted permanently.`);
+                  navigate("/workspace");
+                }}
+                onCreateWorkspace={() => {
+                  setCreateWsOpen(true);
+                }}
               />
             ) : (
               <SiteOverview d={dashboard} showToast={showToast} navToast={navToast} />
