@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Form, Link, useActionData, useNavigation, useSubmit } from "react-router";
+import { Form, Link, useActionData, useNavigate, useNavigation } from "react-router";
 import { useWorkspaceChrome } from "~/components/workspace-shell";
 import { handleWorkspaceAction } from "~/lib/workspace-actions.server";
 import { timeAgo } from "~/lib/workspace-view";
@@ -40,12 +40,14 @@ export default function WorkspaceSites() {
   const { data, currentId, openCreateWs } = useWorkspaceChrome();
   const actionResult = useActionData<typeof action>();
   const navigation = useNavigation();
-  const submit = useSubmit();
+  const navigate = useNavigate();
   const [siteFilter, setSiteFilter] = useState<"all" | "draft" | "published">("all");
   const [siteQuery, setSiteQuery] = useState("");
   const [moreOpen, setMoreOpen] = useState<string | null>(null);
 
-  const creating = navigation.state === "submitting" && navigation.formData?.get("intent") === "create-site";
+  /* [data-new-site] now opens the 3-step wizard at /new-site, the same
+     `go('#/new-site')` the standalone file's handler does. */
+  const createSite = () => navigate("/new-site");
 
   /* Delete used to be a plain POST: the menu stayed open and the card sat there
      until the action round-tripped *and* the whole workspace loader re-ran, which
@@ -140,14 +142,8 @@ export default function WorkspaceSites() {
           </div>
           {/* [data-new-site] in the standalone file. A plain button, matching
               the prototype's markup, so the mobile `.search-box + .btn-dark`
-             rule lines the two up; the POST still goes through the action. */}
-          <button
-            type="button"
-            className="btn-dark"
-            data-new-site
-            disabled={creating}
-            onClick={() => submit({ intent: "create-site", workspaceId: current.id }, { method: "post" })}
-          >
+             rule lines the two up; it opens the new-site wizard. */}
+          <button type="button" className="btn-dark" data-new-site onClick={createSite}>
             {icon("i-plus", 18)}
             <span>
               Create new <span className="long">website</span>
@@ -173,16 +169,12 @@ export default function WorkspaceSites() {
       </div>
 
       <div className="sites" id="site-grid">
-        {/* The grid tile is [data-new-site] too, and runs the same action. */}
-        <Form method="post">
-          <input type="hidden" name="intent" value="create-site" />
-          <input type="hidden" name="workspaceId" value={current.id} />
-          <button type="submit" className="site-new" data-new-site disabled={creating}>
-            <span className="plus">{icon("i-plus", 18)}</span>
-            <strong>Create new site</strong>
-            <span>Start from scratch or use a template</span>
-          </button>
-        </Form>
+        {/* The grid tile is [data-new-site] too, and opens the same wizard. */}
+        <button type="button" className="site-new" data-new-site onClick={createSite}>
+          <span className="plus">{icon("i-plus", 18)}</span>
+          <strong>Create new site</strong>
+          <span>Start from scratch or use a template</span>
+        </button>
 
         {list
           .filter((s) => s.id !== deleting)

@@ -1,22 +1,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useActionData, useLocation, useNavigate, useRouteLoaderData } from "react-router";
+import { Link, useActionData, useLocation, useNavigate, useRouteLoaderData, useSearchParams } from "react-router";
 import { AccountMenu } from "~/components/account-menu";
 import {
   AnalyticsView,
   CategoriesView,
   CheckoutView,
+  generateBranding,
   generateCategories,
   generateCheckout,
   generateOrders,
   generatePages,
+  generatePixels,
   generateProducts,
   OrdersView,
   ProductsView,
   SettingsView,
   WebsitePagesView,
+  type Branding,
   type Category,
   type Checkout,
   type Order,
+  type Pixels,
   type Product,
   type WebPage,
 } from "~/components/overview-screens";
@@ -32,7 +36,7 @@ import type { loader as workspaceDataLoader } from "./workspace-data";
 
 /* The /overview screen from digital-romanian-screen.html (section
    data-route="/overview", nested). One route component serves the three
-   views the standalone file paints there — Overview, Website Pages
+   views the standalone file paints there — Overview, Pages
    (#/overview/pages) and E-Commerce / Store → Products
    (#/overview/products) — picked from the pathname. Markup, icon sizes and
    colours mirror the prototype's static HTML + renderSiteOverview() /
@@ -118,11 +122,10 @@ const GEAR_13 = (
 
 /* SITE_VIEW_TITLES from render(): the per-view document titles and the
    sidebar labels the "coming soon" toast echoes. */
-const SITE_VIEW_TITLES: Record<string, string> = { overview: "Overview", pages: "Website Pages", products: "Products", orders: "Orders", categories: "Categories", checkout: "Checkout Settings", analytics: "Analytics", settings: "Site Settings" };
+const SITE_VIEW_TITLES: Record<string, string> = { overview: "Overview", pages: "Pages", products: "Products", orders: "Orders", categories: "Categories", checkout: "Checkout Settings", analytics: "Analytics", settings: "Site Settings" };
 const NAV_LABELS: Record<string, string> = {
-  cms: "Content/CMS",
+  cms: "Content",
   media: "Media Library",
-  permissions: "Site Permissions",
   settings: "Site Settings",
   orders: "Order",
   categories: "Categories",
@@ -315,7 +318,7 @@ function SiteSwitcher({
 
           <p className="switcher-empty" id="switcher-empty" hidden={filtered.length > 0 || !q}>No workspaces or sites match that search.</p>
 
-          <Link to="/workspace" className="create-site" onClick={() => setOpen(false)}>
+          <Link to="/new-site" className="create-site" onClick={() => setOpen(false)}>
             {icon("i-plus", 18)}
             Create new site
           </Link>
@@ -402,14 +405,28 @@ export default function Overview() {
   const { toast, setToast } = useResultToast(actionResult, null);
   const { pathname } = useLocation();
   const navigate = useNavigate();
+  /* The new-site wizard redirects here with ?site=<id> (and ?domain=<host> when
+     the owner typed one) so the freshly created site is the one that opens. */
+  const [searchParams] = useSearchParams();
+  const bootSiteId = searchParams.get("site");
+  const bootDomain = searchParams.get("domain") ?? "";
+  const bootSite = bootSiteId
+    ? data.workspaces.flatMap((w) => w.sites).find((s) => s.id === bootSiteId)
+    : undefined;
 
   // SITE_VIEW_TITLES lookup from render(): path.split('/')[2] decides the
   // view, anything unknown falls back to the overview.
   const viewSeg = pathname.replace(/\/+$/, "").split("/")[2] ?? "";
   const siteView = SITE_VIEW_TITLES[viewSeg] ? viewSeg : "overview";
 
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(data.workspaces[0]?.id ?? null);
-  const [activeSiteId, setActiveSiteId] = useState<string | null>(null);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(() => {
+    if (bootSite) {
+      const w = data.workspaces.find((x) => x.sites.some((s) => s.id === bootSite.id));
+      if (w) return w.id;
+    }
+    return data.workspaces[0]?.id ?? null;
+  });
+  const [activeSiteId, setActiveSiteId] = useState<string | null>(() => bootSite?.id ?? null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [footOpen, setFootOpen] = useState(false);
   const [footQuery, setFootQuery] = useState("");
@@ -424,11 +441,19 @@ export default function Overview() {
   const [ordersBySite, setOrdersBySite] = useState<Record<string, Order[]>>({});
   const [categoriesBySite, setCategoriesBySite] = useState<Record<string, Category[]>>({});
   const [checkoutBySite, setCheckoutBySite] = useState<Record<string, Checkout>>({});
+  const [brandingBySite, setBrandingBySite] = useState<Record<string, Branding>>({});
+  const [pixelsBySite, setPixelsBySite] = useState<Record<string, Pixels>>({});
   // Domain connected from Site Settings, per site, so the topbar reflects it.
   const [domainBySite, setDomainBySite] = useState<Record<string, string>>({});
+  // Domains entered in the DNS dialog but not verified yet, shown as "pending" on the tab.
+  const [pendingBySite, setPendingBySite] = useState<Record<string, string>>(() =>
+    bootSite && bootDomain ? { [bootSite.id]: bootDomain } : {},
+  );
 
   // state.currentId in the standalone file, shared with the workspace and admin screens.
   useEffect(() => {
+    // A wizard redirect already picked the right workspace for the new site.
+    if (bootSiteId) return;
     try {
       const stored = window.localStorage.getItem("dr-current-workspace");
       if (stored && data.workspaces.some((w) => w.id === stored)) setActiveWorkspaceId(stored);
@@ -463,6 +488,14 @@ export default function Overview() {
     () => (activeSite ? (checkoutBySite[activeSite.id] ?? generateCheckout(activeSite)) : null),
     [activeSite, checkoutBySite],
   );
+  const siteBranding: Branding | null = useMemo(
+    () => (activeSite ? (brandingBySite[activeSite.id] ?? generateBranding(activeSite)) : null),
+    [activeSite, brandingBySite],
+  );
+  const sitePixels: Pixels | null = useMemo(
+    () => (activeSite ? (pixelsBySite[activeSite.id] ?? generatePixels(activeSite)) : null),
+    [activeSite, pixelsBySite],
+  );
   const setSitePages = (updater: (list: WebPage[]) => WebPage[]) => {
     if (!activeSite) return;
     const site = activeSite;
@@ -488,10 +521,39 @@ export default function Overview() {
     const site = activeSite;
     setCheckoutBySite((m) => ({ ...m, [site.id]: updater(m[site.id] ?? generateCheckout(site)) }));
   };
+  const setSiteBranding = (updater: (b: Branding) => Branding) => {
+    if (!activeSite) return;
+    const site = activeSite;
+    setBrandingBySite((m) => ({ ...m, [site.id]: updater(m[site.id] ?? generateBranding(site)) }));
+  };
+  const setSitePixels = (updater: (p: Pixels) => Pixels) => {
+    if (!activeSite) return;
+    const site = activeSite;
+    setPixelsBySite((m) => ({ ...m, [site.id]: updater(m[site.id] ?? generatePixels(site)) }));
+  };
   const setSiteDomain = (domain: string) => {
     if (!activeSite) return;
     const site = activeSite;
     setDomainBySite((m) => ({ ...m, [site.id]: domain }));
+    setPendingBySite((m) => {
+      if (!(site.id in m)) return m;
+      const next = { ...m };
+      delete next[site.id];
+      return next;
+    });
+  };
+  const setSitePending = (domain: string) => {
+    if (!activeSite) return;
+    const site = activeSite;
+    setPendingBySite((m) => {
+      if (!domain) {
+        if (!(site.id in m)) return m;
+        const next = { ...m };
+        delete next[site.id];
+        return next;
+      }
+      return { ...m, [site.id]: domain };
+    });
   };
 
   const sidebarRef = useRef<HTMLElement>(null);
@@ -555,6 +617,29 @@ export default function Overview() {
     }
     if (!activeSiteId || !SITES.some((s) => s.id === activeSiteId)) setActiveSiteId(SITES[0].id);
   }, [activeSiteId, SITES]);
+
+  // After the wizard's ?site/?domain redirect: open that site, say it is ready
+  // (offering the DNS step when a custom domain was entered) and strip the
+  // query so a refresh doesn't re-fire the toast.
+  useEffect(() => {
+    if (!bootSiteId && !bootDomain) return;
+    if (bootSite) {
+      setActiveSiteId(bootSite.id);
+      const w = data.workspaces.find((x) => x.sites.some((s) => s.id === bootSite.id));
+      if (w) setActiveWorkspaceId(w.id);
+      setScreenToast(
+        bootDomain
+          ? {
+              text: `${bootSite.name} is ready. Add the DNS records to connect ${bootDomain}.`,
+              label: "Set up DNS",
+              action: () => navigate("/overview/settings"),
+            }
+          : { text: `${bootSite.name} is ready` },
+      );
+    }
+    navigate(pathname, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /* fitSidebar(): tighten sidebar spacing on short desktop screens. */
   const fitSidebar = useCallback(() => {
@@ -689,7 +774,7 @@ export default function Overview() {
                 <svg className="ic-doc" width="14" height="18" viewBox="0 0 14 18" fill="none" aria-hidden="true">
                   <use href="#i-doc" />
                 </svg>
-                Website Pages
+                Pages
               </Link>
             </li>
             <li className="nav-grp">
@@ -741,19 +826,13 @@ export default function Overview() {
             <li>
               <a className="nav-link" href="/overview" data-site-nav="cms" onClick={inertNav("cms")}>
                 {CMS_ICON}
-                Content/CMS
+                Content
               </a>
             </li>
             <li>
               <a className="nav-link" href="/overview" data-site-nav="media" onClick={inertNav("media")}>
                 {MEDIA_ICON}
                 Media Library
-              </a>
-            </li>
-            <li>
-              <a className="nav-link" href="/overview" data-site-nav="permissions" onClick={inertNav("permissions")}>
-                {icon("i-team")}
-                Site Permissions
               </a>
             </li>
             <li>
@@ -837,7 +916,7 @@ export default function Overview() {
           <div className="ov" id="ov-view">
             {!dashboard || !activeSite ? (
               siteView === "pages" ? (
-                <NoSiteView title="Website Pages" sub="Manage your page tree, SEO titles, subpaths, and publishing status." hasWorkspace={!!activeWorkspace} />
+                <NoSiteView title="Pages" sub="Manage your page tree, SEO titles, subpaths, and publishing status." hasWorkspace={!!activeWorkspace} />
             ) : siteView === "products" || siteView === "orders" || siteView === "categories" || siteView === "checkout" ? (
               <NoSiteView title="E-Commerce / Store" sub="Manage your products, inventory, order lists, and payment channel toggles." hasWorkspace={!!activeWorkspace} />
             ) : siteView === "analytics" ? (
@@ -921,7 +1000,13 @@ export default function Overview() {
                 key={activeSite.id}
                 site={activeSite}
                 d={dashboard}
+                branding={siteBranding ?? generateBranding(activeSite)}
+                pixels={sitePixels ?? generatePixels(activeSite)}
+                pendingDomain={pendingBySite[activeSite.id] ?? ""}
                 onConnect={setSiteDomain}
+                onPending={setSitePending}
+                onSaveBranding={setSiteBranding}
+                onSavePixels={setSitePixels}
                 showToast={showToast}
               />
             ) : (

@@ -18,6 +18,8 @@ export default [
   route("onboarding/workspace", "routes/onboarding-workspace.tsx"),
   route("reset-password", "routes/reset-password.tsx"),
   route("invitation", "routes/invitation.tsx"),
+  // Create a new website: the standalone file's #/new-site 3-step wizard.
+  route("new-site", "routes/new-site.tsx"),
   // The workspace area from digital-romanian-screens.html. One pathless
   // layout owns the shell, the sidebar, the workspace switcher and the two
   // dialogs; the four sections are its children. The standalone file keeps

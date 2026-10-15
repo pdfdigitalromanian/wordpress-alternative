@@ -10,7 +10,7 @@ import { cachedAuthDirectory, recordActivity } from "~/lib/workspace.server";
 
 export type WorkspaceActionResult =
   | { error: string; field?: "wsname" | "wsslug" | "email" }
-  | { created: string; workspaceId?: string }
+  | { created: string; workspaceId?: string; siteId?: string }
   | { ok: true; siteName?: string; workspaceId?: string }
   | {
       invited: number;
@@ -72,15 +72,22 @@ export async function handleWorkspaceAction(request: Request, formData: FormData
       .select("name, slug")
       .eq("workspace_id", workspaceId);
 
+    /* The new-site wizard posts the name the owner chose; the grid's plain
+       button posts nothing, so it keeps the "Untitled site" counter. */
+    const requestedName = String(formData.get("siteName") ?? "").trim();
     const untitled = (existing ?? []).filter((s) => s.name.startsWith("Untitled site")).length;
-    const name = untitled ? `Untitled site ${untitled + 1}` : "Untitled site";
+    const name = requestedName || (untitled ? `Untitled site ${untitled + 1}` : "Untitled site");
     const slug = uniqueSlug(name, (existing ?? []).map((s) => s.slug));
 
-    const { error } = await supabase.from("sites").insert({ workspace_id: workspaceId, name, slug } as never);
+    const { data: created, error } = await supabase
+      .from("sites")
+      .insert({ workspace_id: workspaceId, name, slug } as never)
+      .select("id")
+      .maybeSingle();
     if (error) return { error: "We couldn't create that website. Try again in a moment." };
 
     await recordActivity(supabase, workspaceId, "create", `${name} was created`);
-    return { created: name, workspaceId };
+    return { created: name, workspaceId, siteId: created?.id };
   }
 
   /* ---------- Create workspace ----------

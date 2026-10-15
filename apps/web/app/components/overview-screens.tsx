@@ -2,7 +2,7 @@ import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type C
 import { Link } from "react-router";
 import { slugify } from "~/lib/slugify";
 
-/* Website Pages (#/overview/pages) and E-Commerce / Store → Products
+/* Pages (#/overview/pages) and E-Commerce / Store → Products
    (#/overview/products), the two site screens digital-romanian-screen.html
    paints into #ov-view from renderPagesView()/renderProductsView() plus their
    two dialogs. Markup, copy, mock catalogue, validation messages and empty
@@ -755,7 +755,14 @@ function ProductDialog({
     if (!d) return;
     if (!d.open) d.showModal();
     nameRef.current?.focus();
+    const onCancel = (e: Event) => {
+      if (seoRef.current?.open) return;
+      e.preventDefault();
+      closeAnimated();
+    };
+    d.addEventListener("cancel", onCancel);
     return () => {
+      d.removeEventListener("cancel", onCancel);
       if (d.open) closingRef.current = true;
       d.close();
     };
@@ -768,6 +775,33 @@ function ProductDialog({
       return;
     }
     onCancel();
+  };
+
+  /* Plays the pd-out slide (see overview.css) before the native close, so the
+     dialog slides back out to the right instead of vanishing. */
+  const closeAnimated = (after?: () => void) => {
+    const d = ref.current;
+    if (!d || !d.open) {
+      after?.();
+      return;
+    }
+    if (d.classList.contains("closing")) return;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) {
+      d.close();
+      after?.();
+      return;
+    }
+    d.classList.add("closing");
+    d.addEventListener(
+      "animationend",
+      () => {
+        d.classList.remove("closing");
+        d.close();
+        after?.();
+      },
+      { once: true },
+    );
   };
 
   const clearErr = (id: string) => setErrors((e) => (e[id] ? { ...e, [id]: "" } : e));
@@ -814,20 +848,23 @@ function ProductDialog({
       document.getElementById(first)?.focus();
       return;
     }
-    onSubmit(
-      {
-        name: trimmedName,
-        sku: trimmedSku,
-        cat,
-        stock: Number(stock),
-        price: Math.round(saleNum * 100) / 100,
-        regular: Math.round(regularNum * 100) / 100,
-        desc: desc.trim(),
-        img,
-        sub: desc.trim() ? desc.trim().split("\n")[0].slice(0, 40) : edit ? edit.sub : cat,
-        seo: seoVal,
-      },
-      edit,
+    closingRef.current = true;
+    closeAnimated(() =>
+      onSubmit(
+        {
+          name: trimmedName,
+          sku: trimmedSku,
+          cat,
+          stock: Number(stock),
+          price: Math.round(saleNum * 100) / 100,
+          regular: Math.round(regularNum * 100) / 100,
+          desc: desc.trim(),
+          img,
+          sub: desc.trim() ? desc.trim().split("\n")[0].slice(0, 40) : edit ? edit.sub : cat,
+          seo: seoVal,
+        },
+        edit,
+      ),
     );
   };
 
@@ -846,13 +883,14 @@ function ProductDialog({
   return (
     <>
     <dialog
+      id="dlg-product"
       className="modal modal-product"
       ref={ref}
       aria-labelledby="pf-title"
       aria-describedby="pf-sub"
       onClose={handleClose}
       onClick={(e) => {
-        if (e.target === e.currentTarget) ref.current?.close();
+        if (e.target === e.currentTarget) closeAnimated();
       }}
     >
       <form noValidate onSubmit={submit}>
@@ -861,7 +899,7 @@ function ProductDialog({
             <h2 id="pf-title">{edit ? "Edit Product" : "Add Product"}</h2>
             <p id="pf-sub">{edit ? "Update this product’s details" : "Add a new product to your store"}</p>
           </div>
-          <button type="button" className="icon-btn" aria-label="Close" onClick={() => ref.current?.close()}>
+          <button type="button" className="icon-btn" aria-label="Close" onClick={() => closeAnimated()}>
             {icon("i-close", 18, 18, "0 0 16 16")}
           </button>
         </div>
@@ -1262,7 +1300,7 @@ export function WebsitePagesView({
     <>
       <div className="sv-head">
         <div className="ov-head">
-          <h1 tabIndex={-1}>Website Pages</h1>
+          <h1 tabIndex={-1}>Pages</h1>
           <p>Manage your page tree, SEO titles, subpaths, and publishing status.</p>
         </div>
         <div className="wp-tools">
@@ -1286,7 +1324,7 @@ export function WebsitePagesView({
       </div>
 
       <section className="ov-card wp-card" aria-label="Pages">
-        <div className="wtab" role="table" aria-label="Website pages">
+        <div className="wtab" role="table" aria-label="Pages">
           <div className="wrow head" role="row">
             <span role="columnheader">Page Name/Title</span>
             <span role="columnheader">URL Path</span>
@@ -1309,7 +1347,6 @@ export function WebsitePagesView({
               return (
                 <div className="wrow" role="row" key={p.id}>
                   <span className="wname" role="cell">
-                    <span className="wic">{wIcon(p.ic)}</span>
                     <span>
                       <strong>{p.name}</strong>
                       <span className="wmeta">{p.path} · {p.tpl}</span>
@@ -3503,24 +3540,30 @@ function DomainDialog({
   );
 }
 
+type DnsPhase = "wait" | "check" | "bad" | "ok";
+
 function DnsDialog({
   domain,
   onBack,
   onCancel,
   onConnected,
+  onPending,
 }: {
   domain: string;
   onBack: () => void;
   onCancel: () => void;
   onConnected: () => void;
+  onPending: (domain: string) => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const verifyRef = useRef<HTMLButtonElement>(null);
   const closingRef = useRef(false);
-  const actionRef = useRef<"back" | "connected" | null>(null);
-  const [checking, setChecking] = useState(false);
-  const [status, setStatus] = useState("");
+  const actionRef = useRef<"back" | null>(null);
+  const phaseRef = useRef<DnsPhase>("wait");
+  const triesRef = useRef(0);
+  const [phase, setPhase] = useState<DnsPhase>("wait");
   const [copied, setCopied] = useState<string | null>(null);
+  phaseRef.current = phase;
 
   useEffect(() => {
     const d = ref.current;
@@ -3542,8 +3585,9 @@ function DnsDialog({
       onBack();
       return;
     }
-    if (actionRef.current === "connected") {
-      onConnected();
+    /* Closing without verifying leaves the domain pending on the Custom Domain tab */
+    if (phaseRef.current !== "ok") {
+      onPending(domain);
       return;
     }
     onCancel();
@@ -3566,27 +3610,66 @@ function DnsDialog({
   const copy = (text: string, key: string) => {
     const done = () => {
       setCopied(key);
-      window.setTimeout(() => setCopied(null), 1600);
+      window.setTimeout(() => setCopied(null), 1400);
     };
     if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(done, () => { fallbackCopy(text); done(); });
     else { fallbackCopy(text); done(); }
   };
 
   const verify = () => {
-    if (checking) return;
-    setChecking(true);
-    setStatus(`Looking up the A and CNAME records for ${domain}…`);
+    if (phaseRef.current === "ok") {
+      ref.current?.close();
+      return;
+    }
+    if (phaseRef.current === "check") return;
+    setPhase("check");
     window.setTimeout(() => {
       if (!ref.current?.open) return;
-      actionRef.current = "connected";
-      ref.current?.close();
+      triesRef.current += 1;
+      /* Prototype only: the first check finds the A record but not the CNAME yet, the second one succeeds. */
+      if (triesRef.current < 2) {
+        setPhase("bad");
+        return;
+      }
+      onConnected();
+      setPhase("ok");
     }, 1400);
   };
 
   const lines = DNS_RECORDS.map((r) => `Type: ${r.type} | Host: ${r.host} | Value: ${r.value}`).join("\n");
   const allText = `DNS records for ${domain}\n${lines}`;
-  const copyLabel = (key: string, label: string) =>
-    copied === key ? <>{TICK}Copied</> : <>{COPY_IC}{label}</>;
+  const fieldCopy = (value: string, label: string) => {
+    const key = `f:${label}`;
+    return (
+      <button
+        type="button"
+        className={`dns-fc${copied === key ? " done" : ""}`}
+        aria-label={`Copy ${label}`}
+        title="Copy"
+        onClick={() => copy(value, key)}
+      >
+        {copied === key ? TICK : COPY_IC}
+      </button>
+    );
+  };
+
+  const verifyLabel =
+    phase === "check" ? (
+      <>
+        <span className="dm-spin" aria-hidden="true" />Checking DNS…
+      </>
+    ) : phase === "bad" ? (
+      "Check Again"
+    ) : phase === "ok" ? (
+      "Done"
+    ) : (
+      "Verify Connection"
+    );
+
+  const sslText =
+    phase === "ok"
+      ? "SSL certificate is being issued. Your site will load over https:// within a few minutes."
+      : "SSL certificate will be provisioned automatically once verified.";
 
   return (
     <dialog
@@ -3603,7 +3686,7 @@ function DnsDialog({
           <span className="dm-ic">{I_GLOBE_24}</span>
           <div>
             <h2 id="dns-title">DNS Verification &amp; Record Instructions</h2>
-            <p>Once you enter your domain, the system instantly generates the required DNS records and displays them in a clear, copy-and-paste format.</p>
+            <p>Add these records with your domain registrar (Namecheap, GoDaddy, etc.). Open your domain’s DNS settings there and copy each value below.</p>
           </div>
           <button type="button" className="icon-btn" aria-label="Close" onClick={() => ref.current?.close()}>
             {icon("i-close", 18, 18, "0 0 16 16")}
@@ -3614,7 +3697,7 @@ function DnsDialog({
             {I_INFO_18}
             <span>DNS Configuration for:</span><b>{domain}</b>
             <button type="button" className={`dns-copy${copied === "all" ? " done" : ""}`} onClick={() => copy(allText, "all")}>
-              {copyLabel("all", "Copy All")}
+              {copied === "all" ? <>{TICK}Copied</> : <>{COPY_IC}Copy All</>}
             </button>
           </div>
           <div>
@@ -3623,24 +3706,69 @@ function DnsDialog({
                 <p className="dns-rt">{REC_IC}Record {i + 1} ( {r.title} )</p>
                 {i ? null : <hr />}
                 <div className="dns-row">
-                  <div className="dc"><span>Type:</span><b className={r.type === "A" ? "tp" : undefined}>{r.type}</b></div>
+                  <div className="dc">
+                    <span>Type:</span>
+                    <span className="dns-val"><b className={r.type === "A" ? "tp" : undefined}>{r.type}</b>{fieldCopy(r.type, `record ${i + 1} type`)}</span>
+                  </div>
                   <i className="sep" />
-                  <div className="dc"><span>Host:</span><b>{r.host}</b></div>
+                  <div className="dc">
+                    <span>Host:</span>
+                    <span className="dns-val"><b>{r.host}</b>{fieldCopy(r.host, `record ${i + 1} host`)}</span>
+                  </div>
                   <i className="sep" />
-                  <div className="dc v"><span>Value:</span><b>{r.value}</b></div>
-                  <button type="button" className={`dns-copy${copied === String(i) ? " done" : ""}`} aria-label={`Copy record ${i + 1}`} onClick={() => copy(r.value, String(i))}>
-                    {copyLabel(String(i), "Copy")}
-                  </button>
+                  <div className="dc v">
+                    <span>Value:</span>
+                    <span className="dns-val"><b>{r.value}</b>{fieldCopy(r.value, `record ${i + 1} value`)}</span>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
         </div>
-        <p className="dns-status" role="status" hidden={!status}>{status}</p>
+        <section className={`dns-st${phase === "bad" ? " bad" : phase === "ok" ? " ok" : ""}`} aria-labelledby="dns-st-h">
+          <h3 id="dns-st-h">Connection Status</h3>
+          <div role="status" aria-live="polite">
+            {phase === "wait" ? (
+              <p className="dns-st-line"><span className="dns-dot" aria-hidden="true" />Waiting for DNS propagation… <span className="sub">(Checking live)</span></p>
+            ) : phase === "check" ? (
+              <p className="dns-st-line"><span className="dm-spin" aria-hidden="true" />Looking up the records for {domain}…</p>
+            ) : phase === "bad" ? (
+              <>
+                <p className="dns-st-line"><span className="dns-dot bad" aria-hidden="true" />Records not found yet</p>
+                <ul className="dns-st-list">
+                  {DNS_RECORDS.map((r, i) => {
+                    const ok = i === 0;
+                    return (
+                      <li key={r.type} className={ok ? "ok" : "bad"}>
+                        {ok ? TICK : (
+                          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M12 4 4 12M4 4l8 8" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" /></svg>
+                        )}
+                        {r.type} record ({r.host}) {ok ? "found" : "not found"}
+                      </li>
+                    );
+                  })}
+                </ul>
+                <p className="dns-st-note">DNS changes can take a few minutes, and sometimes up to 48 hours, to spread. Check the missing record at your registrar, then try again.</p>
+              </>
+            ) : (
+              <>
+                <p className="dns-st-line"><span className="dns-dot ok" aria-hidden="true" />Connected · {domain} is live</p>
+                <ul className="dns-st-list">
+                  {DNS_RECORDS.map((r) => (
+                    <li key={r.type} className="ok">{TICK}{r.type} record ({r.host}) verified</li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </div>
+          <p className="dns-st-note">{sslText}</p>
+        </section>
         <div className="dm-foot">
           <button
             type="button"
             className="btn-outline dm-btn"
+            id="dns-back"
+            hidden={phase === "ok"}
             onClick={() => {
               actionRef.current = "back";
               ref.current?.close();
@@ -3651,12 +3779,485 @@ function DnsDialog({
             </svg>
             Back
           </button>
-          <button ref={verifyRef} type="button" className="btn-primary dm-btn wide" disabled={checking} onClick={verify}>
-            {checking ? <><span className="dm-spin" aria-hidden="true" />Checking DNS…</> : "Verify Connection"}
+          <button ref={verifyRef} type="button" className="btn-primary dm-btn wide" disabled={phase === "check"} onClick={verify}>
+            {verifyLabel}
           </button>
         </div>
       </div>
     </dialog>
+  );
+}
+
+/* -------------------------------------------------- Branding & Favicon panel */
+
+const META_T = 60;
+const META_D = 300;
+
+export type Branding = { siteName: string; favicon: string | null; metaTitle: string; metaDesc: string };
+export type Pixels = { ga: string; fb: string; code: string };
+
+/* brandingOf(s) / pixelsOf(s) — seeded defaults from the prototype. */
+export function generateBranding(site: SiteLite & { name: string }): Branding {
+  const shop = isShopSite(site);
+  return {
+    siteName: site.name,
+    favicon: shop ? photoUrl("1635450370155-d6a650322fa5") : null,
+    metaTitle: shop ? `${site.name} | Sustainable Poultry & Produce` : `${site.name} | Official Website`,
+    metaDesc: shop ? "Premium farm-raised broilers, feeds, and fresh produce." : "",
+  };
+}
+export function generatePixels(site: SiteLite): Pixels {
+  return { ga: "", fb: isShopSite(site) ? "123456789012345" : "", code: "" };
+}
+
+const I_IMG_UP = (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M20 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    <path d="m4 17 4.5-4.5 3.5 3.5 2-2 4 4" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+    <circle cx="9" cy="9" r="1.4" fill="currentColor" />
+    <path d="M18 3v6M15 6h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+  </svg>
+);
+const I_GA = (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <rect x="3" y="14" width="4" height="7" rx="1" fill="currentColor" />
+    <rect x="10" y="9" width="4" height="12" rx="1" fill="currentColor" />
+    <rect x="17" y="3" width="4" height="18" rx="1" fill="currentColor" />
+  </svg>
+);
+const I_FB = (
+  <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true">
+    <use href="#i-facebook" />
+  </svg>
+);
+const I_CODE = (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path d="M5.5 4 1.5 8l4 4M10.5 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+const I_SAVE = (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path d="M3 2.5h8l2.5 2.5v8.5H3z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+    <path d="M5.5 2.5v3h5v-3M5.5 13.5V9.5h5v4" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+  </svg>
+);
+
+function BrandingPanel({
+  site,
+  branding,
+  onSave,
+  showToast,
+}: {
+  site: SiteLite & { name: string };
+  branding: Branding;
+  onSave: (updater: (b: Branding) => Branding) => void;
+  showToast: (text: string) => void;
+}) {
+  const [name, setName] = useState(branding.siteName);
+  const [fav, setFav] = useState<string | null>(branding.favicon);
+  const [title, setTitle] = useState(branding.metaTitle);
+  const [desc, setDesc] = useState(branding.metaDesc);
+  const [nameErr, setNameErr] = useState(false);
+  const [favErr, setFavErr] = useState("");
+  const [broken, setBroken] = useState(false);
+  const [drag, setDrag] = useState(false);
+  const nameRef = useRef<HTMLInputElement>(null);
+
+  const initial = initials(name || site.name).slice(0, 1) || "?";
+
+  const take = (file?: File) => {
+    if (!file) return;
+    const okType =
+      /^image\/(png|jpeg|webp|gif|svg\+xml|x-icon|vnd\.microsoft\.icon)$/.test(file.type) ||
+      /\.(png|jpe?g|webp|gif|svg|ico)$/i.test(file.name);
+    if (!okType) {
+      setFavErr("Use a PNG, JPG, WebP, SVG or ICO image.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setFavErr("That image is over 5MB. Pick a smaller one.");
+      return;
+    }
+    setFavErr("");
+    const keepAsIs =
+      /svg/i.test(file.type) || /\.svg$/i.test(file.name) || /icon/i.test(file.type) || /\.ico$/i.test(file.name);
+    const fail = () => setFavErr("That image couldn't be opened. Try another file.");
+    const r = new FileReader();
+    r.onerror = fail;
+    r.onload = () => {
+      const src = String(r.result);
+      if (keepAsIs) {
+        setFav(src);
+        setBroken(false);
+        return;
+      }
+      /* Raster: crop a centred square and downscale to at most 512px, as PNG. */
+      const img = new Image();
+      img.onerror = fail;
+      img.onload = () => {
+        const w = img.naturalWidth || img.width;
+        const h = img.naturalHeight || img.height;
+        const side = Math.min(w, h);
+        if (side < 32) {
+          setFavErr("That image is too small. Use one that is at least 32 × 32px.");
+          return;
+        }
+        const target = Math.min(side, 512);
+        const canvas = document.createElement("canvas");
+        canvas.width = target;
+        canvas.height = target;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          fail();
+          return;
+        }
+        ctx.drawImage(img, (w - side) / 2, (h - side) / 2, side, side, 0, 0, target, target);
+        setFav(canvas.toDataURL("image/png"));
+        setBroken(false);
+        if (w !== h) showToast("Your image wasn't square, so it was cropped to the centre.");
+        else if (side < 512) showToast("Favicon added. A 512 × 512px image will look sharper on phones.");
+      };
+      img.src = src;
+    };
+    r.readAsDataURL(file);
+  };
+
+  const save = () => {
+    const n = name.trim();
+    if (!n) {
+      setNameErr(true);
+      nameRef.current?.focus();
+      return;
+    }
+    const nextTitle = title.trim() || n;
+    onSave((b) => ({ ...b, siteName: n, favicon: fav, metaTitle: nextTitle, metaDesc: desc.trim() }));
+    setTitle(nextTitle);
+    showToast(nextTitle.length > META_T ? `Branding saved. Your meta title is over ${META_T} characters, so Google may shorten it.` : "Branding changes saved");
+  };
+
+  return (
+    <>
+      <h2 className="ss-h br-h">Branding &amp; Global Metadata</h2>
+      <div className="br-row">
+        <label htmlFor="br-name">Site Name:</label>
+        <input
+          ref={nameRef}
+          className="br-input"
+          id="br-name"
+          maxLength={80}
+          autoComplete="off"
+          value={name}
+          aria-invalid={nameErr || undefined}
+          aria-describedby="br-name-err"
+          onChange={(e) => {
+            setName(e.target.value);
+            setNameErr(false);
+          }}
+        />
+        <p className="br-err" id="br-name-err" hidden={!nameErr}>Give your site a name. It shows in browser tabs and search results.</p>
+      </div>
+      <div className="br-row">
+        <span className="br-lbl" id="br-fav-lbl">Favicon Upload</span>
+        <div className="br-fav">
+          <label
+            className={`br-drop${drag ? " drag" : ""}`}
+            id="br-drop"
+            onDragEnter={(e) => {
+              e.preventDefault();
+              setDrag(true);
+            }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDrag(true);
+            }}
+            onDragLeave={() => setDrag(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDrag(false);
+              take(e.dataTransfer.files[0]);
+            }}
+          >
+            {I_IMG_UP}
+            <small>PNG, JPG,<br />SVG or ICO</small>
+            <input
+              type="file"
+              id="br-file"
+              accept=".ico,.svg,image/png,image/jpeg,image/webp,image/gif,image/svg+xml,image/x-icon,image/vnd.microsoft.icon"
+              aria-labelledby="br-fav-lbl"
+              onChange={(e) => {
+                take(e.target.files?.[0]);
+                e.target.value = "";
+              }}
+            />
+          </label>
+          <span className="br-prev" id="br-prev" aria-label="Favicon preview" role="img">
+            {fav && !broken ? <img src={fav} alt="" onError={() => setBroken(true)} /> : initial}
+          </span>
+          <button
+            type="button"
+            className="btn-text"
+            id="br-fav-rm"
+            hidden={!fav}
+            onClick={() => {
+              setFav(null);
+              setFavErr("");
+              setBroken(false);
+            }}
+          >
+            Remove
+          </button>
+        </div>
+        <p className="br-err" id="br-fav-err" role="alert" hidden={!favErr}>{favErr}</p>
+      </div>
+      <h3 className="br-sec">
+        Global Site Default SEO <small>(Fallback for pages without custom SEO)</small>
+      </h3>
+      <div className="br-row">
+        <label htmlFor="br-title">Default Meta Title:</label>
+        <div className="br-field">
+          <input
+            className="br-input has-pill"
+            id="br-title"
+            autoComplete="off"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
+          <span
+            className={`br-pill${title.length > META_T ? " over" : ""}`}
+            id="br-title-pill"
+            title={title.length > META_T ? `Google usually cuts titles after about ${META_T} characters` : undefined}
+          >
+            {title.length} chars
+          </span>
+        </div>
+      </div>
+      <div className="br-row top">
+        <label htmlFor="br-desc">Default Meta Description:</label>
+        <div className="br-field">
+          <textarea
+            className="br-input"
+            id="br-desc"
+            maxLength={META_D}
+            placeholder="A short line that describes the site in search results"
+            value={desc}
+            onChange={(e) => setDesc(e.target.value)}
+          />
+          <p className="br-count" id="br-desc-count" aria-live="polite">{desc.length}/{META_D}</p>
+        </div>
+      </div>
+      <div className="br-foot">
+        <button type="button" className="btn-dark" id="br-save" onClick={save}>Save Branding Changes</button>
+      </div>
+    </>
+  );
+}
+
+/* -------------------------------------------------- Analytics & Pixels panel */
+
+const PX_RULES = {
+  ga: { re: /^G-[A-Z0-9]{6,12}$/, msg: "A Measurement ID looks like G-XXXXXXXXXX (G, a dash, then letters and numbers)." },
+  fb: { re: /^\d{15,16}$/, msg: "A Pixel ID is 15 or 16 digits, numbers only." },
+};
+const codeSnippet = (c: string) => {
+  const line = (c || "").split("\n").map((x) => x.trim()).find(Boolean);
+  return line || "...custom tracking script...";
+};
+
+function PixelsPanel({
+  site,
+  pixels,
+  onSave,
+  showToast,
+}: {
+  site: SiteLite & { name: string };
+  pixels: Pixels;
+  onSave: (updater: (p: Pixels) => Pixels) => void;
+  showToast: (text: string) => void;
+}) {
+  const [ga, setGa] = useState(pixels.ga);
+  const [fb, setFb] = useState(pixels.fb);
+  const [code, setCode] = useState(pixels.code);
+  const [errs, setErrs] = useState<{ ga: string; fb: string }>({ ga: "", fb: "" });
+  const [copied, setCopied] = useState<string | null>(null);
+  const [codeOpen, setCodeOpen] = useState(false);
+  const gaRef = useRef<HTMLInputElement>(null);
+  const fbRef = useRef<HTMLInputElement>(null);
+  const codeRef = useRef<HTMLTextAreaElement>(null);
+
+  const copy = (text: string, key: string) => {
+    const done = () => {
+      setCopied(key);
+      window.setTimeout(() => setCopied(null), 1600);
+    };
+    const fallback = () => {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.cssText = "position:fixed;opacity:0";
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand("copy");
+        done();
+      } catch {
+        showToast(text);
+      }
+      ta.remove();
+    };
+    if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(done, fallback);
+    else fallback();
+  };
+
+  const openCode = () => {
+    setCodeOpen(true);
+    requestAnimationFrame(() => codeRef.current?.focus());
+  };
+
+  const save = () => {
+    let first: "ga" | "fb" | null = null;
+    const next = { ga: "", fb: "" };
+    (Object.keys(PX_RULES) as ("ga" | "fb")[]).forEach((k) => {
+      const v = (k === "ga" ? ga : fb).trim();
+      if (v && !PX_RULES[k].re.test(v)) {
+        next[k] = PX_RULES[k].msg;
+        first = first ?? k;
+      }
+    });
+    setErrs(next);
+    if (first) {
+      (first === "ga" ? gaRef : fbRef).current?.focus();
+      return;
+    }
+    const c = code.trim();
+    if (/<script\b/i.test(c) && !/<\/script>/i.test(c)) {
+      if (codeOpen) codeRef.current?.focus();
+      else openCode();
+      showToast("Your custom code has an opening <script> tag with no closing </script>.");
+      return;
+    }
+    onSave(() => ({ ga: ga.trim(), fb: fb.trim(), code: c }));
+    const n = [ga.trim(), fb.trim(), c].filter(Boolean).length;
+    showToast(n ? `Tracking saved. ${n} ${n === 1 ? "tool is" : "tools are"} active on ${site.name}.` : "Tracking saved. No tracking tools are active.");
+  };
+
+  return (
+    <>
+      <h2 className="ss-h br-h">Analytics &amp; Pixels</h2>
+      <p className="px-sub">Connect your tracking tools and add custom scripts to monitor your site&apos;s performance and behaviour.</p>
+      <div className="px-list">
+        <div className="px-row tint">
+          <span className="px-ic">{I_GA}</span>
+          <div>
+            <strong>Google Analytics</strong>
+            <span className="px-id">
+              <label htmlFor="px-ga">Measurement ID:</label>
+              <span className="px-br">[</span>{" "}
+              <input
+                ref={gaRef}
+                className="px-in"
+                id="px-ga"
+                inputMode="text"
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="G-XXXXXXXXXX"
+                value={ga}
+                aria-describedby="px-ga-err"
+                aria-invalid={errs.ga ? true : undefined}
+                onChange={(e) => {
+                  setGa(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, ""));
+                  setErrs((s) => ({ ...s, ga: "" }));
+                }}
+              />{" "}
+              <span className="px-br">]</span>
+            </span>
+            <p className="px-err" id="px-ga-err" hidden={!errs.ga}>{errs.ga}</p>
+          </div>
+          <button
+            type="button"
+            className={`px-copy${copied === "ga" ? " done" : ""}`}
+            disabled={!ga.trim()}
+            onClick={() => {
+              const v = ga.trim();
+              if (v) copy(v, "ga");
+            }}
+          >
+            {copied === "ga" ? <>{TICK}Copied</> : <>{COPY_IC}Copy ID</>}
+          </button>
+        </div>
+        <div className="px-row">
+          <span className="px-ic">{I_FB}</span>
+          <div>
+            <strong>Facebook / Meta Pixel</strong>
+            <span className="px-id">
+              <label htmlFor="px-fb">Pixel ID:</label>
+              <span className="px-br">[</span>{" "}
+              <input
+                ref={fbRef}
+                className="px-in"
+                id="px-fb"
+                inputMode="numeric"
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="123456789012345"
+                value={fb}
+                aria-describedby="px-fb-err"
+                aria-invalid={errs.fb ? true : undefined}
+                onChange={(e) => {
+                  setFb(e.target.value.replace(/\D/g, ""));
+                  setErrs((s) => ({ ...s, fb: "" }));
+                }}
+              />{" "}
+              <span className="px-br">]</span>
+            </span>
+            <p className="px-err" id="px-fb-err" hidden={!errs.fb}>{errs.fb}</p>
+          </div>
+          <button
+            type="button"
+            className={`px-copy${copied === "fb" ? " done" : ""}`}
+            disabled={!fb.trim()}
+            onClick={() => {
+              const v = fb.trim();
+              if (v) copy(v, "fb");
+            }}
+          >
+            {copied === "fb" ? <>{TICK}Copied</> : <>{COPY_IC}Copy ID</>}
+          </button>
+        </div>
+        <div className="px-row tint">
+          <span className="px-ic code">{I_CODE}</span>
+          <div>
+            <strong>Custom Header Code Injection</strong>
+            <span className="px-snip">
+              <code id="px-snip">{codeSnippet(code)}</code>
+              <button
+                type="button"
+                className="btn-text"
+                id="px-code-toggle"
+                aria-expanded={codeOpen}
+                aria-controls="px-code"
+                onClick={() => {
+                  if (codeOpen) setCodeOpen(false);
+                  else openCode();
+                }}
+              >
+                {codeOpen ? "Hide editor" : code.trim() ? "Edit" : "Add script"}
+              </button>
+            </span>
+          </div>
+          <button type="button" className="btn-dark px-save" id="px-save" onClick={save}>{I_SAVE}Save Tracking Configuration</button>
+          <label className="sr-only" htmlFor="px-code">Custom code added to the head of every page</label>
+          <textarea
+            ref={codeRef}
+            className="px-code"
+            id="px-code"
+            hidden={!codeOpen}
+            spellCheck={false}
+            placeholder={"<!-- Paste scripts here. They load in the <head> of every page. -->"}
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+          />
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -3665,12 +4266,24 @@ type DomainDialogState = { t: "domain"; prefill: string } | { t: "dns"; domain: 
 export function SettingsView({
   site,
   d,
+  branding,
+  pixels,
+  pendingDomain,
   onConnect,
+  onPending,
+  onSaveBranding,
+  onSavePixels,
   showToast,
 }: {
   site: SiteLite & { name: string };
   d: { domain: string; live: boolean };
+  branding: Branding;
+  pixels: Pixels;
+  pendingDomain: string;
   onConnect: (domain: string) => void;
+  onPending: (domain: string) => void;
+  onSaveBranding: (updater: (b: Branding) => Branding) => void;
+  onSavePixels: (updater: (p: Pixels) => Pixels) => void;
   showToast: (text: string) => void;
 }) {
   const [tab, setTab] = useState<SsTab>("domain");
@@ -3680,6 +4293,7 @@ export function SettingsView({
 
   const focusTab = (k: SsTab) => tabRefs.current[k]?.focus();
   const openDomain = (prefill: string) => setDlg({ t: "domain", prefill });
+  const openDns = (domain: string) => setDlg({ t: "dns", domain });
 
   const onTabKey = (e: React.KeyboardEvent<HTMLButtonElement>) => {
     if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
@@ -3699,6 +4313,13 @@ export function SettingsView({
           <span className={`st${d.live ? "" : " off"}`}>({d.live ? "Active" : "Not live"})</span>
           <span className="dot" aria-hidden="true" />
         </p>
+        {pendingDomain ? (
+          <p className="ss-pend">
+            <span className="dns-dot" aria-hidden="true" />
+            <b>{pendingDomain}</b>Pending · waiting for DNS records
+            <button type="button" className="btn-text" onClick={() => openDns(pendingDomain)}>View DNS records</button>
+          </p>
+        ) : null}
         <label className="ss-lbl" htmlFor="ss-domain">Add Custom Domain:</label>
         <div className="ss-add">
           <input
@@ -3723,11 +4344,17 @@ export function SettingsView({
         <ul className="ss-dns">
           {DNS_RECORDS.map((r) => (
             <li key={r.type}>
-              <span>Type:</span>{r.type}<i /><span>Host:</span>{r.host}<i /><span>Value:</span>{r.value}
+              <span className="f"><span>Type:</span> <b>{r.type}</b></span><i />
+              <span className="f"><span>Host:</span> <b>{r.host}</b></span><i />
+              <span className="f v"><span>Value:</span> <b>{r.value}</b></span>
             </li>
           ))}
         </ul>
       </>
+    ) : tab === "branding" ? (
+      <BrandingPanel site={site} branding={branding} onSave={onSaveBranding} showToast={showToast} />
+    ) : tab === "pixels" ? (
+      <PixelsPanel site={site} pixels={pixels} onSave={onSavePixels} showToast={showToast} />
     ) : (
       <div className="ss-soon">
         <span className="soon-tag">Coming soon</span>
@@ -3787,11 +4414,13 @@ export function SettingsView({
           domain={dlg.domain}
           onBack={() => setDlg({ t: "domain", prefill: dlg.domain })}
           onCancel={() => setDlg(null)}
-          onConnected={() => {
-            const connected = dlg.domain;
-            onConnect(connected);
+          onPending={(pending) => {
+            onPending(pending);
             setDlg(null);
-            showToast(`${connected} is connected to ${site.name}`);
+          }}
+          onConnected={() => {
+            onConnect(dlg.domain);
+            showToast(`${dlg.domain} is connected to ${site.name}. SSL is being set up.`);
           }}
         />
       ) : null}

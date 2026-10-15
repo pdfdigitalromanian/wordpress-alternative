@@ -1,6 +1,24 @@
 # Progress
 
-Last updated: 2026-10-14, end of the session that ported the prototype's
+Last updated: 2026-10-15, the session that (a) ported three further
+prototype changes from the design HTML one-for-one: the Site Settings
+**Custom Domain** tab's pending domain + live DNS verification dialog, the
+add/edit **product dialog** slide-in/out animation, and the **Create a new
+website** 3-step wizard behind the existing create buttons; then (b) synced
+the app to the re-saved prototype `wp.html` — the **Site Permissions** tab
+removed, "Website Pages" renamed **Pages** with its row icons dropped,
+"Content/CMS" renamed **Content**, and the wizard's first step rebuilt as a
+description + category-chips screen with Back/Skip/Continue.
+The prototype HTML was renamed from `digital-romanian-screen.html` to
+`wp.html` (the old name no longer exists).
+Before that, same day: the session that replaced the Site
+Settings "Coming soon" placeholders on the **Branding & Favicon** and
+**Analytics & Pixels** tabs with the prototype's full panels, widened the
+favicon upload to PNG/JPG/WebP/GIF/SVG/ICO with a client-side square crop,
+then synced both panels and their CSS to the prototype HTML's compact
+values one-for-one (an earlier Figma "re-measure" of those panels was
+reverted in the prototype and so was reverted here).
+Before that: 2026-10-14, the session that ported the prototype's
 Site & Store Analytics and Site Settings screens (plus the sidebar's Store
 label, Analytics row and Site Settings link) into the CMS overview.
 Earlier: 2026-10-08, E-Commerce/Store screens (Products, Website Pages,
@@ -574,3 +592,209 @@ the overview screens above). A second temporary probe (fixture user with
 no `display_name`) confirmed login lands on `/onboarding/profile`, and both
 `/onboarding/workspace` and `/workspace` redirect there; the fixture edit
 and temp files were reverted after the run.
+
+## Site Settings: Branding & Favicon + Analytics & Pixels panels - 15 October 2026
+
+Replaced the two "Coming soon" placeholders on the Site Settings tabs with
+the prototype's full panels, ported one-for-one from
+`digital-romanian-screen.html` (`brandingPanel`/`wireBranding` ~6283-6363,
+`pixelsPanel`/`wirePixels` ~6365-6439). Presentation only; no migrations,
+no hosted writes, nothing deployed.
+
+- **Branding & Favicon** (`overview-screens.tsx`): new `BrandingPanel` -
+  site name, favicon upload (click/drag-drop with a live preview that falls
+  back to the site initial), and Global Site Default SEO (meta title with a
+  60-char pill, meta description with a 300-char counter). Save validates a
+  non-empty name, persists and toasts; an over-length title gets the
+  prototype's "Google may shorten it" toast. (The accepted formats were
+  later widened, and the Remove/Discard affordances plus the hint line were
+  later dropped so the panel matches the re-measured prototype - see the two
+  subsections below.)
+- **Analytics & Pixels** (`overview-screens.tsx`): new `PixelsPanel` - GA
+  Measurement ID (uppercased/`[A-Z0-9-]`) and Meta Pixel ID (digits only)
+  rows with per-field Copy ID, the custom header-code row with a
+  snippet/toggle editor, and "Save Tracking Configuration". Validation
+  mirrors `PX_RULES` (`G-XXXXXXXXXX`, 15-16 digits), an unclosed `<script>`
+  in the custom code reopens the editor with a toast, and the save toast
+  reports how many tools are active on the site.
+- **State** (`overview.tsx`): added exported `Branding`/`Pixels` types and
+  `generateBranding`/`generatePixels` seeds (shop sites get the prototype's
+  favicon + poultry meta defaults, via `isShopSite`). Held per site in new
+  `brandingBySite`/`pixelsBySite` maps with `setSiteBranding`/`setSitePixels`
+  updaters, matching the pages/products/orders/checkout pattern, so saved
+  values survive moving between the site views. `SettingsView` takes the
+  value + updater as props; `SS_SOON` now only backs the Danger Zone tab.
+- **CSS** (`overview.css`): appended the prototype's `.br-*` / `.px-*`
+  blocks (including the `760px` media query) verbatim. (These values were
+  later replaced by the re-measured block - see the second subsection below.)
+
+Verification: `pnpm typecheck` clean and
+`pnpm --filter @digital-romanian/web build` clean. Browser-verified via
+Playwright against the local `e2e/support/feature-server.mjs` fixture (no
+hosted services): a temporary spec signed in, selected the fixture site,
+opened Site Settings, and confirmed the Branding heading/name/title, the
+live 19/300 description counter, the Pixels heading + GA row + save button,
+and the custom-code editor updating its snippet. The temp spec/config and
+screenshots were removed after the run, so no new committed e2e coverage
+exists (consistent with the overview screens above).
+
+### Favicon upload: wider formats + client-side square crop - 15 October 2026
+
+Follow-up work order on the same panel. The favicon input now accepts
+PNG, JPG, WebP, GIF, SVG and ICO (accept list + type check; rejection
+message "Use a PNG, JPG, WebP, SVG or ICO image.") and raises the cap to
+5 MB.
+
+- **SVG / ICO** are kept exactly as uploaded (data URL, no re-encode).
+- **Raster (PNG/JPG/WebP/GIF)** go through `take()`: decode, crop a centred
+  square (`side = min(w, h)`), draw onto a canvas at `min(side, 512)` and
+  store `canvas.toDataURL("image/png")`. Errors/toasts: `< 32px` → "That
+  image is too small. Use one that is at least 32 × 32px."; non-square →
+  toast "Your image wasn't square, so it was cropped to the centre.";
+  square but `< 512px` → toast "Favicon added. A 512 × 512px image will
+  look sharper on phones."; decode failure → "That image couldn't be
+  opened. Try another file." Drag-and-drop calls the same `take()`.
+
+Verification: `pnpm typecheck` and production build clean; a temporary
+Playwright spec against the fixture dispatched real canvas-generated files
+to `#br-file` and confirmed the exact accept attribute, the wrong-type
+error, the too-small error, the non-square crop (preview `src` becomes
+`data:image/png` + "wasn't square" toast), the small-square toast, an SVG
+kept as `data:image/svg+xml`, and a dropped too-small file hitting the same
+error. Temp spec/config/screenshot removed after the run. (The drop-box
+label was later reverted to the prototype's wording, and the hint line
+dropped, in the sync below.)
+
+### Panels matched to the prototype HTML - 15 October 2026
+
+The prototype's `digital-romanian-screen.html` had been briefly regenerated
+with values "re-measured from Figma" and the React panels were synced to
+that revision; the prototype then reverted to its **compact** values (the
+file was re-edited again at 02:25). The React panels and CSS were re-synced
+to the *current* prototype one-for-one. To settle it objectively, the two
+were measured with a throwaway Playwright spec: every relevant computed
+property (font-size/weight/colour, box metrics, padding, margin, gap,
+grid-template-columns, min-height) was compared between the prototype
+(`file://…#/overview/settings`) and the React app (`/overview/settings`),
+and every value now matches exactly in both panels.
+
+- **CSS** (`overview.css`): `.br-*` / `.px-*` now mirror the prototype
+  verbatim. Notes that mattered:
+  - The `.br-h` heading rule stays 19px/500 in the file but is **dead
+    code** in both the prototype and the app — the base
+    `[data-route="/overview"] .ov-card h2` (16px/600) wins on specificity,
+    so `h2.br-h` renders 16px/600. The earlier `…h2.ss-h.br-h` override
+    (22px, then 19px) was **removed**: it was the main thing making the app
+    differ.
+  - The `.ss-panel:has(.br-h)` / `:has(.px-list)` padding overrides were
+    **removed**; the prototype has no such rule, so the base `.ss-panel`
+    padding (22/14/26) applies.
+  - Rows: `.br-row` is a `150px / 1fr` grid, `gap 8px 16px`, `margin-top
+    22px`, `padding-left 18px`; `.br-row.top` for the textarea row. Drop
+    box / preview are 62px; `.br-drop small` is 6px. `.br-sec` is
+    18px/500 (`margin-top 40px`); `.br-foot` 38px `.btn-dark`. `.px-row`
+    is a 90px `40px / 1fr / auto` grid, `padding 16px 18px 16px 22px`; tint
+    `#eef3f0`; `.px-in` is `22ch`/12.5px; `.px-save` 38px.
+- **Branding** (`overview-screens.tsx`): favicon row is a plain `.br-row`
+  (no `.fav`/`.seo` classes); the drop-box label reads "PNG, JPG, SVG or
+  ICO"; a **Remove** button (`#br-fav-rm`, hidden until a favicon exists)
+  sits next to the preview; SEO labels read "Default Meta Title:" /
+  "Default Meta Description:" and the description row is `.br-row.top`.
+  The 5 MB message is the prototype's exact "That image is over 5MB. Pick
+  a smaller one."
+- **Pixels** (`overview-screens.tsx`): the custom-code snippet is a
+  `.px-snip` `<span>` containing `<code id="px-snip">` and a `.btn-text`
+  toggle (`#px-code-toggle`) whose label is "Add script" / "Edit" /
+  "Hide editor".
+
+Verification: `pnpm typecheck` clean and production build clean; the
+throwaway Playwright measurement spec (prototype vs fixture) reported an
+exact match for all measured properties; temp spec/config/screenshots
+removed after the run.
+
+### Custom domain verification, product slide-in and the new-site wizard - 15 October 2026
+
+Three more changes the owner made in `digital-romanian-screen.html` were
+ported one-for-one.
+
+- **Site Settings → Custom Domain** (`overview-screens.tsx`,
+  `overview.css`, `overview.tsx`): the tab now shows a **pending domain**
+  banner (`.ss-pend`) when a domain was entered but not verified. The
+  **DNS dialog** was upgraded to the prototype's live version: per-field
+  copy buttons (`.dns-fc`), a **Connection Status** section
+  (`.dns-st`/`.dns-st-line`/`.dns-st-list`/`.dns-dot`) that walks
+  wait → checking → "A found / CNAME missing" → verified (the prototype's
+  two-try behaviour, with a comment marking it prototype-only), a
+  `.dns-val` layout, and `#dns-back` hidden once verified. Closing without
+  verifying leaves the domain pending; verifying clears it and toasts.
+  `overview.tsx` gained a `pendingBySite` map threaded through
+  `SettingsView` as `pendingDomain`/`onPending`. All new CSS added; the
+  `.dm-*` mobile metrics were synced to the prototype (`height 48px`,
+  `font-size 15px`, field radius 8px).
+- **Add/Edit product dialog slides in from the right**
+  (`overview-screens.tsx`, `overview.css`): the dialog carries
+  `id="dlg-product"` and the exact `pd-in`/`pd-out`/`pd-fade` keyframes
+  and reduced-motion guard from the prototype. A `closeAnimated()` helper
+  plays `pd-out` before the native close on the X, backdrop click and Esc
+  (`cancel`), and before handing off on submit; the StrictMode guard is
+  unchanged.
+- **Create a new website wizard** (new `routes/new-site.tsx`, registered
+  in `routes.ts`; CSS in `digital-romanian.css`): the 3-step
+  category → name → domain wizard from the prototype (9 categories,
+  name suggestions, live `.digitalromanian.site` address hint, optional
+  custom domain with the prototype's validation). `create-site` in
+  `workspace-actions.server.ts` now accepts `siteName` and returns the new
+  `siteId`. On launch the action redirects to
+  `/overview?site=<id>[&domain=<host>]`; `overview.tsx` opens that site,
+  seeds the pending domain and offers a "Set up DNS" toast, then strips the
+  query. Every create entry point (`workspace-sites.tsx` header + grid
+  tile, and the overview site switcher) now opens `/new-site`, matching the
+  prototype's `[data-new-site]`/`[data-wiz-start]` handlers. The two
+  "no site" empty states keep their prototype `/workspace` link.
+
+Category → theme is not persisted: the applied `sites` table has no
+theme/category column and the app already derives a display theme from the
+site name (`themeForSite`), so the wizard's category only tailors the name
+suggestions. The custom domain is likewise not written to `site_domains`;
+it is carried client-side exactly like the rest of the ported domain UI.
+
+Verification: `pnpm typecheck` clean and production build clean
+(`new-site` chunk emitted). No DB migration; no hosted Supabase writes.
+
+### Sidebar/page-label sync + wizard first step to the renamed prototype - 15 October 2026
+
+The prototype was re-saved as `wp.html` at the repo root (it replaced
+`digital-romanian-screen.html`, which no longer exists). Three further
+owner edits in it were ported one-for-one:
+
+- **Site Permissions tab removed** (`overview.tsx`): the sidebar's
+  "Site Permissions" row is gone, and the `permissions` key was dropped
+  from `NAV_LABELS`. `wp.html` has no "permission" text anywhere, which
+  confirms it.
+- **Pages relabel + row icons removed** (`overview.tsx`,
+  `overview-screens.tsx`, CSS comment): "Website Pages" is now **Pages**
+  everywhere the user can see it — the sidebar item, the pages screen
+  `<h1>`, its `aria-label`, and the no-site empty-state title.
+  `SITE_VIEW_TITLES.pages` is `"Pages"`. The per-row `.wic` icon was
+  removed from the Pages table rows (products keep their `.pthumb`
+  thumbnails; `.wic` CSS remains but is now dead, matching `wp.html`).
+- **"Content/CMS" → "Content"** (`overview.tsx`): the sidebar item and
+  `NAV_LABELS.cms` now read **Content**.
+- **Wizard first step redesigned** (`new-site.tsx`, `digital-romanian.css`):
+  step 1 is no longer the category *grid*; it is the prototype's
+  `.wiz-about` block — a centered heading, an auto-growing
+  `.wiz-desc` textarea (rows=1, maxlength=400) and a row of nine
+  label-only `.wiz-chip` buttons — with a `.wiz-foot3` footer of
+  **Back** (cancels to `/workspace`), **Skip** and **Continue**. Continue
+  is disabled until a category is chosen or the description is non-empty;
+  Skip/Continue guess a category from the description (`CAT_WORDS`/
+  `guessCat`) and advance to the name step. CSS matches the prototype's
+  block verbatim, including the mobile `.wiz-foot3`/`h1`/chip rules.
+
+Code comments that still name `digital-romanian-screen.html` (and the
+"Website Pages"/"Content/CMS" CSS section comments) were left as-is —
+they are not user-visible and the file rename is noted here instead.
+
+Verification: `pnpm --filter @digital-romanian/web typecheck` clean and
+production build clean (root CSS emitted at 138.24 kB, up from 136.73 kB).
+No DB migration; no hosted Supabase writes.
