@@ -596,27 +596,18 @@ export default function WorkspaceSettings() {
                     }}
                   />
                 </label>
-                <label className="sbtn light">
-                  {SWAP}Change image
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg"
-                    className="set-file"
-                    aria-label="Change workspace image"
-                    onChange={(e) => {
-                      const file = e.currentTarget.files?.[0];
-                      if (!file) return;
-                      const reader = new FileReader();
-                      reader.onload = () => setLogo(String(reader.result ?? ""));
-                      reader.readAsDataURL(file);
-                    }}
-                  />
-                </label>
+                <button
+                  type="button"
+                  className="sbtn light"
+                  id="set-img-rm"
+                  disabled={!logo}
+                  onClick={() => setLogo(null)}
+                >
+                  {TRASH16}Remove image
+                </button>
               </div>
               <p className="shelp" role="status" style={{ marginTop: 10 }}>
-                {logo
-                  ? "Preview only. The workspaces table has no image column yet, so Save stores the name and reports this as skipped."
-                  : "No image set."}
+                {logo ? "Image preview updated. Click Save to apply it." : "No image set."}
               </p>
             </div>
           </div>

@@ -34,11 +34,6 @@ const I_CHECK_C = (
     <path d="m5 8.2 2 2 4-4.2" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
-const I_CLOUD = (
-  <svg width="36" height="28" viewBox="0 0 36 28" fill="none" aria-hidden="true">
-    <use href="#i-cloud-up" />
-  </svg>
-);
 const PREV = (
   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
     <path d="M10 3.5 5.5 8l4.5 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -200,6 +195,10 @@ const CAT_PHOTO: Record<string, string> = {
 };
 
 const photoUrl = (id: string) => `https://images.unsplash.com/photo-${id}?w=120&h=120&fit=crop&auto=format&q=70`;
+/* Articles fall back to a real cover photo (not just the emoji) so the Content
+   list always shows an image, unlike the product/category thumb helpers which
+   key off a category. */
+const ART_COVER = "1499750310107-5fef28a66643";
 const thumbSrc = (p: { img: string | null; photo?: string; cat: string }) => p.img || photoUrl(p.photo || CAT_PHOTO[p.cat] || CAT_PHOTO["Fresh Produce"]);
 const abbr = (n: string) =>
   n
@@ -350,12 +349,14 @@ function MoreMenu({
   className = "row-menu",
   buttonClassName = "more-btn",
   buttonContent = icon("i-more"),
+  wrapClassName = "menu-anchor",
 }: {
   ariaLabel: string;
   items: MenuItem[];
   className?: string;
   buttonClassName?: string;
   buttonContent?: ReactNode;
+  wrapClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [up, setUp] = useState(false);
@@ -403,7 +404,7 @@ function MoreMenu({
   }, [open]);
 
   return (
-    <span className="menu-anchor" ref={wrapRef}>
+    <span className={wrapClassName} ref={wrapRef}>
       <button
         ref={btnRef}
         type="button"
@@ -774,7 +775,9 @@ function ProductDialog({
   const [sale, setSale] = useState(edit ? edit.price.toFixed(2) : "");
   const [regular, setRegular] = useState(edit ? (edit.regular ?? edit.price).toFixed(2) : "");
   const [desc, setDesc] = useState(edit?.desc ?? "");
-  const [img, setImg] = useState<string | null>(edit?.img ?? null);
+  const [img, setImg] = useState<string | null>(
+    edit ? edit.img || thumbSrc(edit).replace("w=120&h=120", "w=280&h=280") : null,
+  );
   const [imgErr, setImgErr] = useState("");
   const [drag, setDrag] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -968,56 +971,53 @@ function ProductDialog({
           </button>
         </div>
 
-        <label
-          className={`pf-drop${img ? " has-img" : ""}${drag ? " drag" : ""}`}
-          id="pf-drop"
-          onDragEnter={(e) => {
-            e.preventDefault();
-            setDrag(true);
-          }}
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDrag(true);
-          }}
-          onDragLeave={() => setDrag(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDrag(false);
-            take(e.dataTransfer.files?.[0]);
-          }}
-        >
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/png,image/jpeg"
-            aria-label="Upload product image"
-            onChange={(e) => {
-              take(e.target.files?.[0]);
-              e.target.value = "";
-            }}
-          />
-          <svg className="pf-dash" aria-hidden="true">
-            <rect x=".5" y=".5" rx="12" ry="12" />
-          </svg>
-          <span id="pf-drop-body" style={{ display: "contents" }}>
-            {img ? (
-              <img src={img} alt="Product image preview" />
-            ) : (
-              <>
-                {I_CLOUD}
-                <strong>Upload product image</strong>
-                <small>Drag and drop an image, or click to browse</small>
-                <small>JPG, PNG (max 5MB)</small>
-              </>
-            )}
-          </span>
-        </label>
-
-        <div className="pf-imgbar" hidden={!img}>
-          <button type="button" className="btn-text" onClick={() => fileRef.current?.click()}>Replace image</button>
-          <button type="button" className="btn-text" onClick={() => setImg(null)}>Remove</button>
+        <div className="ar-feat x-img">
+          <span className="ar-lbl" id="pf-img-l">Product Image</span>
+          <div className="ar-imgs">
+            <span className={`ar-thumb${img ? "" : " empty"}`} id="pf-thumb" role="img" aria-label="Product Image preview">
+              {img ? <img src={img} alt="" /> : icon("i-image", 26, 26, "0 0 24 24")}
+            </span>
+            <label
+              className={`ar-pick${drag ? " drag" : ""}`}
+              id="pf-drop"
+              onDragEnter={(e) => {
+                e.preventDefault();
+                setDrag(true);
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDrag(true);
+              }}
+              onDragLeave={() => setDrag(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDrag(false);
+                take(e.dataTransfer.files?.[0]);
+              }}
+            >
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/png,image/jpeg"
+                aria-labelledby="pf-img-l pf-pick-l"
+                onChange={(e) => {
+                  take(e.target.files?.[0]);
+                  e.target.value = "";
+                }}
+              />
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M20 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                <path d="m4 17 4.5-4.5 3.5 3.5 2-2 4 4" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+                <circle cx="9" cy="9" r="1.4" fill="currentColor" />
+                <path d="M18 3v6M15 6h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+              <strong id="pf-pick-l">{img ? "Change Image" : "Upload Image"}</strong>
+              <small>Recommended size: 140 × 140px JPG, PNG (Max 5MB)</small>
+            </label>
+            <button type="button" className="btn-text" id="pf-img-remove" hidden={!img} onClick={() => setImg(null)}>Remove</button>
+          </div>
+          <p className="pf-err" id="pf-img-err" role="alert" hidden={!imgErr}>{imgErr}</p>
         </div>
-        <p className="pf-err" role="alert" hidden={!imgErr} style={{ textAlign: "center" }}>{imgErr}</p>
 
         <div className="pf-fields pf-grid">
           <div className="pf-field">
@@ -1630,12 +1630,6 @@ const ART_FILTER_ICON = (
     <path d="M2.5 5h13M5 9h8M7.5 13h3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
   </svg>
 );
-const I_DOC_16 = (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-    <path d="M4 2.5h5.5L12.5 5.5v8H4z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-    <path d="M6 8h4.5M6 10.5h4.5M6 5.5h2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-  </svg>
-);
 const I_PENCIL_12 = (
   <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
     <use href="#i-edit" />
@@ -1750,6 +1744,7 @@ export function ContentView({
             ariaLabel="Filter articles by status"
             className="fmenu"
             buttonClassName="ofilter-btn"
+            wrapClassName="ofilter"
             buttonContent={
               <>
                 {ART_FILTER_ICON}
@@ -1787,7 +1782,7 @@ export function ContentView({
                   <span className="acell" role="cell">
                     <span className="athumb" style={{ ["--tb" as string]: a.tint }} aria-hidden="true">
                       {a.emoji}
-                      {a.img || a.photo ? <img src={a.img || photoUrl(a.photo!)} alt="" loading="lazy" onError={(e) => e.currentTarget.remove()} /> : null}
+                      <img src={a.img || photoUrl(a.photo || ART_COVER)} alt="" loading="lazy" onError={(e) => e.currentTarget.remove()} />
                     </span>
                     <span className="atxt">
                       <strong>{a.title}</strong>
@@ -1851,7 +1846,7 @@ export function ContentView({
           </div>
         </div>
       </section>
-      <div className="sv-foot">
+      <div className="sv-foot" id="art-foot">
         <span>
           {list.length
             ? `Showing ${start + 1}–${start + rows.length} of ${list.length} ${list.length === 1 ? "article" : "articles"}`
@@ -1954,42 +1949,99 @@ function ArticleDialog({
   showToast: (text: string) => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
-  const bodyRef = useRef<HTMLDialogElement>(null);
-  const seoRef = useRef<HTMLDialogElement>(null);
   const closingRef = useRef(false);
-  const seoClosingRef = useRef(false);
-  const bodyClosingRef = useRef(false);
   const nameRef = useRef<HTMLInputElement>(null);
-  const aeRef = useRef<HTMLDivElement>(null);
+  const docRef = useRef<HTMLDivElement>(null);
+  const rangeRef = useRef<Range | null>(null);
+  const urlRef = useRef<HTMLInputElement>(null);
+  const featFileRef = useRef<HTMLInputElement>(null);
+  const inlineImgRef = useRef<HTMLInputElement>(null);
 
   const [name, setName] = useState(edit?.title ?? "");
   const [slug, setSlug] = useState(edit?.slug ?? "");
   const [slugEdited, setSlugEdited] = useState(!!edit);
-  const [author, setAuthor] = useState(edit?.author ?? AUTHOR_ROLES[0]);
-  const [status, setStatus] = useState<"published" | "draft">(edit?.status ?? "published");
-  const [img, setImg] = useState<string | null>(edit?.img ?? null);
+  const [img, setImg] = useState<string | null>(
+    edit ? edit.img || photoUrl(edit.photo || ART_COVER).replace("w=120&h=120", "w=280&h=280") : null,
+  );
   const [imgErr, setImgErr] = useState("");
-  const [body, setBody] = useState<string>(edit ? (edit.body || (edit.excerpt ? `<p>${edit.excerpt}</p>` : "")) : "");
-  const [aeText, setAeText] = useState(() => (edit ? textOf(edit.body || "") : ""));
-  const [excerpt, setExcerpt] = useState(edit?.excerpt ?? "");
-  const [exAuto, setExAuto] = useState(!(edit?.excerptCustom));
+  const [drag, setDrag] = useState(false);
   const [aeErr, setAeErr] = useState("");
-  const [bodyOpen, setBodyOpen] = useState(false);
+  const [aeEmpty, setAeEmpty] = useState(true);
+  const [block, setBlock] = useState("p");
+  const [fmt, setFmt] = useState<Record<string, boolean>>({});
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [url, setUrl] = useState("");
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [, setTick] = useState(0);
   const [seoOpen, setSeoOpen] = useState(false);
   const [errs, setErrs] = useState<Record<string, string>>({});
   const [seo, setSeo] = useState<ArticleSeo>(
     edit?.seo ?? { title: "", meta: "", slug: `/blog/${edit?.slug ?? ""}`, index: true, auto: { title: true, meta: true }, ogUse: true, og: null },
   );
 
+  /* Author and status are not shown in the prototype's dialog: a new article
+     is published under the first site role, an existing one keeps its own. */
+  const author = edit?.author ?? AUTHOR_ROLES[0];
+  const status: "published" | "draft" = edit?.status ?? "published";
+
+  const slugPath = () => "/blog/" + slug.trim().replace(/^-+|-+$/g, "");
+  const aeTextNow = () => (docRef.current ? (docRef.current.innerText || "").replace(/\s+/g, " ").trim() : "");
+  const aeBlockNow = () => {
+    try {
+      return String(document.queryCommandValue("formatBlock")).toLowerCase();
+    } catch {
+      return "";
+    }
+  };
+
+  const slugClean = slug.trim().replace(/^-+|-+$/g, "");
+  const slugOk = !!slugClean && !articles.some((x) => x !== edit && x.slug === slugClean);
+
+  /* aseoFill(): keep the auto meta title/description in step with the article. */
+  const syncSeo = () => {
+    const n = name.trim();
+    const text = aeTextNow();
+    setSeo((s) => {
+      const title = s.auto.title ? (n ? n + " — " + site.name : "") : s.title;
+      const meta = s.auto.meta ? seoTwo(text) : s.meta;
+      if (title === s.title && meta === s.meta) return s;
+      return { ...s, title, meta };
+    });
+  };
+
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
     if (!d.open) d.showModal();
+    if (docRef.current) {
+      docRef.current.innerHTML = edit ? edit.body || (edit.excerpt ? `<p>${edit.excerpt.replace(/</g, "&lt;")}</p>` : "") : "";
+    }
+    try {
+      document.execCommand("defaultParagraphSeparator", false, "p");
+      document.execCommand("styleWithCSS", false, "false");
+    } catch {
+      /* older browsers */
+    }
+    setAeEmpty(!aeTextNow() && !docRef.current?.querySelector("img,li"));
+    syncSeo();
     nameRef.current?.focus();
     return () => {
       if (d.open) closingRef.current = true;
       d.close();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const onSel = () => {
+      const doc = docRef.current;
+      const sel = window.getSelection();
+      if (!doc || !sel?.anchorNode || !doc.contains(sel.anchorNode)) return;
+      saveRange();
+      aeState();
+    };
+    document.addEventListener("selectionchange", onSel);
+    return () => document.removeEventListener("selectionchange", onSel);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -2001,340 +2053,16 @@ function ArticleDialog({
     onCancel();
   };
 
-  const slugPath = () => "/blog/" + slug.trim().replace(/^-+|-+$/g, "");
-  const articleText = () => (aeRef.current ? (aeRef.current.innerText || "").replace(/\s+/g, " ").trim() : aeText);
-
-  /* Excerpt fills from the first sentences of the body until the owner types
-     their own — arExFill() in wp.html. */
-  const exFill = (text: string) => {
-    if (exAuto) setExcerpt(seoTwo(text).slice(0, 200));
-  };
-
-  const fillSeo = (text: string, ex: string) => {
-    setSeo((s) => ({
-      ...s,
-      title: s.auto.title && name.trim() ? name.trim() + " — " + site.name : s.title,
-      meta: s.auto.meta ? seoTwo(ex.trim() || text).slice(0, 200) : s.meta,
-      slug: s.slug || slugPath(),
-    }));
-  };
-
-  const takeImg = (file?: File) => {
-    if (!file) return;
-    if (!/^image\/(png|jpe?g|webp)$/.test(file.type)) return setImgErr("Use a JPG, PNG or WebP image.");
-    if (file.size > 5 * 1024 * 1024) return setImgErr("That image is over 5MB. Pick a smaller one.");
-    setImgErr("");
-    const r = new FileReader();
-    r.onload = () => setImg(String(r.result));
-    r.readAsDataURL(file);
-  };
-
   const clearErr = (id: string) => setErrs((e) => (e[id] ? { ...e, [id]: "" } : e));
-
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const title = name.trim();
-    const sl = slug.trim().replace(/^-+|-+$/g, "");
-    const auth = author.trim();
-    let first: string | null = null;
-    const bad = (id: string, msg: string) => {
-      setErrs((s) => ({ ...s, [id]: msg }));
-      first = first ?? id;
-    };
-    setErrs({});
-    if (!title) bad("ar-name", "Give the article a title.");
-    if (!sl) bad("ar-slug", "Add a URL slug, e.g. 5-tips-raising-broilers.");
-    else if (articles.some((x) => x !== edit && x.slug === sl)) bad("ar-slug", `/blog/${sl} is already used by another article.`);
-    if (!auth) bad("ar-author", "Pick who this article is posted as.");
-    if (first) {
-      document.getElementById(first)?.focus();
-      return;
-    }
-    const text = articleText();
-    const hasImg = !!aeRef.current?.querySelector("img");
-    if (status === "published" && !text && !hasImg) {
-      setAeErr("Write the article before publishing, or save it as a draft.");
-      return;
-    }
-    setAeErr("");
-    const ex = excerpt.trim() || seoTwo(text).slice(0, 200);
-    const data: ArticleDraft = {
-      title,
-      slug: sl,
-      author: auth,
-      status,
-      excerpt: ex,
-      excerptCustom: !exAuto && !!excerpt.trim(),
-      img,
-      body: aeRef.current ? aeRef.current.innerHTML : body,
-      bodySnip: fmtSnip(aeRef.current ? aeRef.current.innerHTML : body),
-      seo: { ...seo, slug: slugPath() },
-    };
-    if (edit && status === "published" && edit.status !== "published") data.date = Date.now();
-    onSubmit(data, edit);
-  };
-
-  return (
-    <>
-      <dialog className="modal modal-product" id="dlg-article" ref={ref} aria-labelledby="ar-title" aria-describedby="ar-sub" onClose={handleClose} onClick={(e) => { if (e.target === e.currentTarget) ref.current?.close(); }}>
-        <form onSubmit={submit} noValidate>
-          <div className="pf-head">
-            <div>
-              <h2 id="ar-title">{edit ? "Edit Article" : "Add New Article"}</h2>
-              <p id="ar-sub">{edit ? "Update this article’s content and details." : "Write a blog post, farm update or resource guide."}</p>
-            </div>
-            <button type="button" className="icon-btn" aria-label="Close" onClick={() => ref.current?.close()}>
-              {icon("i-close", 18, 18, "0 0 16 16")}
-            </button>
-          </div>
-          <label className={`pf-drop${img ? " has-img" : ""}`} id="ar-drop">
-            <input type="file" accept="image/png,image/jpeg,image/webp" aria-label="Upload cover image" onChange={(e) => { takeImg(e.target.files?.[0]); e.target.value = ""; }} />
-            {img ? <img src={img} alt="Cover image preview" /> : <>{I_CLOUD}<strong>Upload featured banner image</strong><small>Drag and drop an image, or click to browse</small><small>1200 × 630px · JPG, PNG or WebP (max 5MB)</small></>}
-          </label>
-          <div className="pf-imgbar" hidden={!img}>
-            <button type="button" className="btn-text" onClick={() => (document.getElementById("ar-file-btn") as HTMLInputElement | null)?.click()}>Replace image</button>
-            <button type="button" className="btn-text" onClick={() => setImg(null)}>Remove</button>
-          </div>
-          <p className="pf-err" role="alert" hidden={!imgErr} style={{ textAlign: "center" }}>{imgErr}</p>
-          <div className="pf-fields pf-grid">
-            <div className="pf-field full">
-              <label htmlFor="ar-name">Article Title<span className="req" aria-hidden="true">*</span></label>
-              <input
-                ref={nameRef}
-                className="pf-input"
-                id="ar-name"
-                maxLength={100}
-                autoComplete="off"
-                placeholder="e.g. 5 Tips for Raising Healthy Broilers"
-                value={name}
-                onChange={(e) => {
-                  clearErr("ar-name");
-                  const v = e.target.value;
-                  setName(v);
-                  if (!slugEdited) {
-                    setSlug(slugify(v).slice(0, 80));
-                    clearErr("ar-slug");
-                  }
-                }}
-              />
-              <p className="pf-err" hidden={!errs["ar-name"]}>{errs["ar-name"]}</p>
-            </div>
-            <div className="pf-field full">
-              <label htmlFor="ar-slug">URL Slug <span className="opt-note">(Auto-generated)</span><span className="req" aria-hidden="true">*</span></label>
-              <div className="pf-box ar-slug">
-                <span aria-hidden="true">/blog/</span>
-                <input
-                  id="ar-slug"
-                  autoComplete="off"
-                  spellCheck={false}
-                  maxLength={80}
-                  placeholder="5-tips-raising-broilers"
-                  value={slug}
-                  onChange={(e) => {
-                    setSlugEdited(true);
-                    clearErr("ar-slug");
-                    setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-{2,}/g, "-"));
-                  }}
-                />
-              </div>
-              <p className="pf-err" hidden={!errs["ar-slug"]}>{errs["ar-slug"]}</p>
-            </div>
-            <div className="pf-field">
-              <label htmlFor="ar-author">Author<span className="req" aria-hidden="true">*</span></label>
-              <select className="pf-input" id="ar-author" value={author} onChange={(e) => { setAuthor(e.target.value); clearErr("ar-author"); }}>
-                {AUTHOR_ROLES.map((r) => (
-                  <option key={r} value={r}>{r}</option>
-                ))}
-              </select>
-              <p className="pf-err" hidden={!errs["ar-author"]}>{errs["ar-author"]}</p>
-            </div>
-            <div className="pf-field">
-              <label htmlFor="ar-status">Status</label>
-              <select className="pf-input" id="ar-status" value={status} onChange={(e) => setStatus(e.target.value as "published" | "draft")}>
-                <option value="published">Published</option>
-                <option value="draft">Draft</option>
-              </select>
-            </div>
-            <div className="pf-field full">
-              <span className="ae-lbl" id="ae-lbl">Content Body<span className="req" aria-hidden="true">*</span></span>
-              <div className={`ab-card${aeErr ? " bad" : ""}${!aeText && !img ? " empty" : ""}`} id="ab-card">
-                <span className="ps-badge" aria-hidden="true">{I_DOC_16}</span>
-                <span className="ab-txt">
-                  <b id="ab-sum">{abSum(aeText, body)}</b>
-                  <span className="ab-snip" id="ab-snip">
-                    {aeText ? (
-                      <span dangerouslySetInnerHTML={{ __html: fmtSnip(body) }} />
-                    ) : (
-                      "Write the article: paragraph text, headings, bullet points."
-                    )}
-                  </span>
-                </span>
-                <button type="button" className="ps-edit" id="ab-open" aria-haspopup="dialog" onClick={() => { setBodyOpen(true); }}>
-                  {I_PENCIL_12}
-                  <span>{aeText ? "Edit content" : "Write content"}</span>
-                </button>
-              </div>
-              <p className="pf-err" hidden={!aeErr}>{aeErr}</p>
-            </div>
-            <div className="pf-seo full">
-              <div className="ps-head">
-                <span className="ps-badge" aria-hidden="true">{icon("i-search", 16, 16, "0 0 16 16")}</span>
-                <span className="ps-label">Search engine listing<small>How this article appears on Google and when shared</small></span>
-                <button type="button" className="ps-edit" onClick={() => { setSeoOpen(true); }}>
-                  {I_PENCIL_12}
-                  Edit SEO
-                </button>
-              </div>
-              <ArticleSeoCard site={site} title={seo.title || name} meta={seo.meta || excerpt} slugPath={seo.slug || slugPath()} index={seo.index} />
-            </div>
-          </div>
-          <div className="pf-foot">
-            <button type="button" className="btn-outline pf-btn" onClick={() => ref.current?.close()}>Cancel</button>
-            <button type="submit" className="btn-primary pf-btn">{edit ? "Save Changes" : "Add Article"}</button>
-          </div>
-        </form>
-      </dialog>
-
-      <ArticleBodyDialog
-        open={bodyOpen}
-        body={body}
-        excerpt={excerpt}
-        exAuto={exAuto}
-        onClose={(saved, nextBody, nextExcerpt, nextAuto) => {
-          setBodyOpen(false);
-          if (saved) {
-            setBody(nextBody);
-            setExcerpt(nextExcerpt);
-            setExAuto(nextAuto);
-            const t = textOf(nextBody);
-            setAeText(t);
-            setAeErr("");
-            fillSeo(t, nextExcerpt);
-          }
-        }}
-      />
-
-      <ArticleSeoDialog
-        open={seoOpen}
-        site={site}
-        name={name}
-        seo={seo}
-        img={img}
-        onClose={(saved, next) => {
-          setSeoOpen(false);
-          if (saved && next) {
-            setSeo(next);
-            const sl = next.slug.trim().replace(/^\/?(blog\/)?/, "").toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-{2,}/g, "-").replace(/^-+|-+$/g, "");
-            if (sl && sl !== slug) {
-              setSlug(sl);
-              setSlugEdited(true);
-              clearErr("ar-slug");
-            }
-          }
-        }}
-      />
-    </>
-  );
-}
-
-function abSum(text: string, html: string) {
-  const n = text ? text.split(" ").length : 0;
-  const hasImg = typeof document !== "undefined" && /<img/i.test(html);
-  if (n) return `${n} ${n === 1 ? "word" : "words"} · ${Math.max(1, Math.round(n / 200))} min read`;
-  return hasImg ? "Images only" : "No content yet";
-}
-
-/* ---------------------------------------------------------- content body */
-
-function ArticleBodyDialog({
-  open,
-  body,
-  excerpt,
-  exAuto,
-  onClose,
-}: {
-  open: boolean;
-  body: string;
-  excerpt: string;
-  exAuto: boolean;
-  onClose: (saved: boolean, body: string, excerpt: string, exAuto: boolean) => void;
-}) {
-  const ref = useRef<HTMLDialogElement>(null);
-  const docRef = useRef<HTMLDivElement>(null);
-  const rangeRef = useRef<Range | null>(null);
-  const snapRef = useRef<{ body: string; excerpt: string; exAuto: boolean } | null>(null);
-  const savedRef = useRef(false);
-  const linkRef = useRef<HTMLDivElement>(null);
-  const urlRef = useRef<HTMLInputElement>(null);
-  const imgRef = useRef<HTMLInputElement>(null);
-  const closingRef = useRef(false);
-
-  const [words, setWords] = useState(0);
-  const [ex, setEx] = useState(excerpt);
-  const [auto, setAuto] = useState(exAuto);
-  const [block, setBlock] = useState("p");
-  const [fmt, setFmt] = useState<Record<string, boolean>>({});
-  const [linkOpen, setLinkOpen] = useState(false);
-  const [url, setUrl] = useState("");
-  const [tick, setTick] = useState(0);
-
-  useEffect(() => {
-    const d = ref.current;
-    if (!d) return;
-    if (!open) return;
-    if (!d.open) d.showModal();
-    snapRef.current = { body, excerpt, exAuto };
-    savedRef.current = false;
-    if (docRef.current) {
-      docRef.current.innerHTML = body;
-      setWords(countWords(docRef.current.innerText));
-    }
-    try {
-      document.execCommand("defaultParagraphSeparator", false, "p");
-      document.execCommand("styleWithCSS", false, "false");
-    } catch {
-      /* older browsers */
-    }
-    requestAnimationFrame(() => {
-      docRef.current?.focus();
-      const r = document.createRange();
-      const el = docRef.current;
-      if (el) {
-        r.selectNodeContents(el);
-        r.collapse(false);
-        const sel = window.getSelection();
-        sel?.removeAllRanges();
-        sel?.addRange(r);
-      }
-    });
-    return () => {
-      if (d.open) closingRef.current = true;
-      d.close();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-
-  const handleClose = () => {
-    if (closingRef.current) {
-      closingRef.current = false;
-      return;
-    }
-    const snap = snapRef.current;
-    const el = docRef.current;
-    const nextBody = savedRef.current && el ? el.innerHTML : snap ? snap.body : body;
-    const nextEx = savedRef.current ? ex : snap ? snap.excerpt : excerpt;
-    const nextAuto = savedRef.current ? auto : snap ? snap.exAuto : exAuto;
-    onClose(savedRef.current, nextBody, nextEx, nextAuto);
-  };
-
-  const aeTextNow = () => (docRef.current ? (docRef.current.innerText || "").replace(/\s+/g, " ").trim() : "");
-  const countWords = (t: string) => (t ? t.split(" ").length : 0);
 
   const saveRange = () => {
     const sel = window.getSelection();
     const el = docRef.current;
     if (sel && sel.rangeCount && el && el.contains(sel.anchorNode)) rangeRef.current = sel.getRangeAt(0).cloneRange();
   };
+  /* Put the caret back only when focus actually left the editor (e.g. the style
+     menu or a keyboard-focused button) — re-setting it while the editor still
+     has focus wipes the browser's pending bold/italic/underline. */
   const restoreRange = () => {
     const el = docRef.current;
     if (!el) return;
@@ -2348,67 +2076,100 @@ function ArticleBodyDialog({
     }
   };
 
-  useEffect(() => {
-    if (!open) return;
-    const onSel = () => {
-      const el = docRef.current;
-      const sel = window.getSelection();
-      if (!el || !sel?.anchorNode || !el.contains(sel.anchorNode)) return;
-      saveRange();
-      let blk = "";
-      try {
-        blk = String(document.queryCommandValue("formatBlock")).toLowerCase();
-      } catch {
-        blk = "";
-      }
-      const q = (c: string) => {
-        try {
-          return document.queryCommandState(c);
-        } catch {
-          return false;
-        }
-      };
-      setBlock(["h2", "h3"].includes(blk) ? blk : "p");
-      setFmt({
-        bold: q("bold"),
-        italic: q("italic"),
-        underline: q("underline"),
-        insertUnorderedList: q("insertUnorderedList"),
-        insertOrderedList: q("insertOrderedList"),
-        quote: blk === "blockquote",
-      });
-      setTick((t) => t + 1);
-    };
-    document.addEventListener("selectionchange", onSel);
-    return () => document.removeEventListener("selectionchange", onSel);
-  }, [open]);
-
-  const refresh = () => {
-    setWords(countWords(aeTextNow()));
-    saveRange();
+  const AE_FMT: Record<string, (el: HTMLElement) => boolean> = {
+    bold: (el) => /^(B|STRONG)$/.test(el.tagName) || /^(bold|[6-9]00)$/.test(el.style.fontWeight),
+    italic: (el) => /^(I|EM)$/.test(el.tagName) || el.style.fontStyle === "italic",
+    underline: (el) => el.tagName === "U" || /underline/.test(el.style.textDecoration + el.style.textDecorationLine),
+  };
+  const aeHas = (node: Node, c: string) => {
+    const start = node.nodeType === 1 ? (node as HTMLElement) : node.parentElement;
+    for (let n = start; n && n !== docRef.current; n = n.parentElement) if (AE_FMT[c](n)) return true;
+    return false;
+  };
+  /* true only if every bit of selected text already has the format (null when nothing is selected) */
+  const aeAll = (c: string): boolean | null => {
+    const sel = window.getSelection();
+    const doc = docRef.current;
+    if (!sel || !sel.rangeCount || sel.isCollapsed || !doc) return null;
+    const r = sel.getRangeAt(0);
+    const w = document.createTreeWalker(doc, NodeFilter.SHOW_TEXT);
+    let n: Node | null;
+    let any = false;
+    while ((n = w.nextNode())) {
+      if (!r.intersectsNode(n) || !(n as Text).data.trim()) continue;
+      if (n === r.endContainer && r.endOffset === 0) continue;
+      if (n === r.startContainer && r.startOffset >= (n as Text).length) continue;
+      any = true;
+      if (!aeHas(n, c)) return false;
+    }
+    return any;
   };
 
-  const cmd = (c: string) => {
-    restoreRange();
-    const el = docRef.current;
-    if (!el) return;
-    if (c === "quote") {
-      let blk = "";
+  const aeState = () => {
+    const doc = docRef.current;
+    if (!doc) return;
+    const blk = aeBlockNow();
+    const q = (c: string) => {
       try {
-        blk = String(document.queryCommandValue("formatBlock")).toLowerCase();
+        return document.queryCommandState(c);
       } catch {
-        blk = "";
+        return false;
       }
-      document.execCommand("formatBlock", false, blk === "blockquote" ? "p" : "blockquote");
-    } else if (c === "removeFormat") {
+    };
+    /* Headings are bold by design, so in a heading only real bold tags count. */
+    const inHeading = blk === "h2" || blk === "h3";
+    const sel = window.getSelection();
+    const node = sel?.anchorNode ? (sel.anchorNode.nodeType === 1 ? (sel.anchorNode as HTMLElement) : sel.anchorNode.parentElement) : null;
+    const hasTag = (re: RegExp) => {
+      for (let n = node; n && n !== doc; n = n.parentElement) if (re.test(n.tagName)) return true;
+      return false;
+    };
+    const fs = (c: string) => {
+      const all = aeAll(c);
+      return all === null ? (c === "bold" && inHeading ? hasTag(/^(B|STRONG)$/) : q(c)) : all;
+    };
+    setBlock(["h2", "h3"].includes(blk) ? blk : "p");
+    setFmt({
+      bold: fs("bold"),
+      italic: fs("italic"),
+      underline: fs("underline"),
+      justifyLeft: q("justifyLeft"),
+      justifyCenter: q("justifyCenter"),
+      justifyRight: q("justifyRight"),
+      insertUnorderedList: q("insertUnorderedList"),
+      insertOrderedList: q("insertOrderedList"),
+      quote: blk === "blockquote",
+    });
+    setTick((t) => t + 1);
+  };
+
+  const refreshDoc = () => {
+    setAeEmpty(!aeTextNow() && !docRef.current?.querySelector("img,li"));
+    setAeErr("");
+    saveRange();
+    syncSeo();
+  };
+
+  const runCmd = (c: string) => {
+    restoreRange();
+    if (c === "quote") document.execCommand("formatBlock", false, aeBlockNow() === "blockquote" ? "p" : "blockquote");
+    else if (c === "removeFormat") {
       document.execCommand("removeFormat");
       document.execCommand("formatBlock", false, "p");
-    } else {
+    } else if (AE_FMT[c] && aeAll(c) === false) {
+      let on = false;
+      try {
+        on = document.queryCommandState(c);
+      } catch {
+        on = false;
+      }
+      if (on) document.execCommand(c);
       document.execCommand(c);
-    }
+      if (aeAll(c) === false) document.execCommand(c);
+    } else document.execCommand(c);
     saveRange();
-    refresh();
-    setTick((t) => t + 1);
+    refreshDoc();
+    aeState();
   };
 
   const applyLink = () => {
@@ -2421,176 +2182,477 @@ function ArticleBodyDialog({
     }
     if (!/^(https?:|mailto:|\/)/i.test(u)) u = "https://" + u;
     const sel = window.getSelection();
-    if (sel && sel.isCollapsed) document.execCommand("insertHTML", false, `<a href="${u.replace(/"/g, "&quot;")}">${u.replace(/</g, "&lt;")}</a>`);
+    if (sel?.isCollapsed) document.execCommand("insertHTML", false, `<a href="${u.replace(/"/g, "&quot;")}">${u.replace(/</g, "&lt;")}</a>`);
     else document.execCommand("createLink", false, u);
     setUrl("");
-    refresh();
+    refreshDoc();
   };
 
-  const readImg = (f?: File) => {
+  const readInlineImg = (f?: File) => {
     if (!f) return;
     if (!/^image\/(png|jpe?g|webp)$/.test(f.type) || f.size > 5 * 1024 * 1024) {
-      showToastSafe("Use a JPG, PNG or WebP image under 5MB.");
+      showToast("Use a JPG, PNG or WebP image under 5MB.");
       return;
     }
     const r = new FileReader();
     r.onload = () => {
       restoreRange();
       document.execCommand("insertHTML", false, `<img src="${String(r.result)}" alt="">`);
-      refresh();
+      refreshDoc();
     };
     r.readAsDataURL(f);
   };
 
-  const n = words;
+  const takeImg = (file?: File) => {
+    if (!file) return;
+    if (!/^image\/(png|jpe?g|webp)$/.test(file.type)) return setImgErr("Use a JPG, PNG or WebP image.");
+    if (file.size > 5 * 1024 * 1024) return setImgErr("That image is over 5MB. Pick a smaller one.");
+    setImgErr("");
+    const r = new FileReader();
+    r.onload = () => setImg(String(r.result));
+    r.readAsDataURL(file);
+  };
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const title = name.trim();
+    const sl = slug.trim().replace(/^-+|-+$/g, "");
+    const next: Record<string, string> = {};
+    let first: string | null = null;
+    const bad = (id: string, msg: string) => {
+      next[id] = msg;
+      first ??= id;
+    };
+    if (!title) bad("ar-name", "Give the article a title.");
+    if (!sl) bad("ar-slug", "Add a URL slug, e.g. 5-tips-raising-broilers.");
+    else if (articles.some((x) => x !== edit && x.slug === sl)) bad("ar-slug", `/blog/${sl} is already used by another article.`);
+    setErrs(next);
+    if (first) {
+      document.getElementById(first)?.focus();
+      return;
+    }
+    const text = aeTextNow();
+    if (status === "published" && !text && !docRef.current?.querySelector("img")) {
+      setAeErr("Write the article before publishing, or save it as a draft.");
+      docRef.current?.focus();
+      return;
+    }
+    setAeErr("");
+    const html = docRef.current ? docRef.current.innerHTML : "";
+    const data: ArticleDraft = {
+      title,
+      slug: sl,
+      author,
+      status,
+      excerpt: seoTwo(text).slice(0, 200),
+      excerptCustom: false,
+      img,
+      body: html,
+      bodySnip: fmtSnip(html),
+      seo: { ...seo, slug: slugPath() },
+    };
+    if (edit && status === "published" && edit.status !== "published") data.date = Date.now();
+    onSubmit(data, edit);
+  };
+
+  const err = (id: string) => errs[id] || "";
+
   return (
-    <dialog className="modal modal-seo modal-abody" ref={ref} aria-labelledby="ab-title" onClose={handleClose} onClick={(e) => { if (e.target === e.currentTarget) ref.current?.close(); }} hidden={!open}>
-      <div className="seo-head">
-        <div>
-          <h2 id="ab-title">Content Body</h2>
-          <p>Write the article. Use the toolbar for headings, bold text and bullet points.</p>
-        </div>
-        <button type="button" className="icon-btn" aria-label="Close" onClick={() => { savedRef.current = false; ref.current?.close(); }}>
-          {icon("i-close", 18, 18, "0 0 16 16")}
-        </button>
-      </div>
-      <div className="seo-body">
-        <div className="ae" id="ae">
-          <div className="ae-bar" role="toolbar" aria-label="Formatting" aria-controls="ae-doc">
-            <label className="sr-only" htmlFor="ae-block">Text style</label>
-            <select
-              className="ae-block"
-              id="ae-block"
-              value={block}
-              onChange={(e) => {
-                restoreRange();
-                document.execCommand("formatBlock", false, e.target.value);
-                setBlock(e.target.value);
-                refresh();
-              }}
-            >
-              <option value="p">Paragraph</option>
-              <option value="h2">Heading</option>
-              <option value="h3">Subheading</option>
-            </select>
-            <span className="ae-sep" aria-hidden="true" />
-            <AeBtn label="Bold" title="Bold (Ctrl+B): highlight text, or click before typing" on={!!fmt.bold} onClick={() => cmd("bold")}>
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4.5 3h4.2a2.6 2.6 0 0 1 0 5.2H4.5zM4.5 8.2h4.8a2.6 2.6 0 0 1 0 5.3H4.5z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" /></svg>
-            </AeBtn>
-            <AeBtn label="Italic" title="Italic (Ctrl+I): highlight text, or click before typing" on={!!fmt.italic} onClick={() => cmd("italic")}>
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M10 3H6.5M9.5 13H6M9 3 7 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
-            </AeBtn>
-            <AeBtn label="Underline" title="Underline (Ctrl+U): highlight text, or click before typing" on={!!fmt.underline} onClick={() => cmd("underline")}>
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4.5 2.5v5a3.5 3.5 0 0 0 7 0v-5M3.5 14h9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
-            </AeBtn>
-            <span className="ae-sep" aria-hidden="true" />
-            <AeBtn label="Bullet list" title="Bullet list" on={!!fmt.insertUnorderedList} onClick={() => cmd("insertUnorderedList")}>
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="3" cy="4" r="1" fill="currentColor" /><circle cx="3" cy="8" r="1" fill="currentColor" /><circle cx="3" cy="12" r="1" fill="currentColor" /><path d="M6 4h7.5M6 8h7.5M6 12h7.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
-            </AeBtn>
-            <AeBtn label="Numbered list" title="Numbered list" on={!!fmt.insertOrderedList} onClick={() => cmd("insertOrderedList")}>
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2.4 3.2 3.4 2.6V6M2.3 13.4h2l-1.9-2.2c.6-.8 1.9-.6 1.9.3M6.5 4h7M6.5 8h7M6.5 12h7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
-            </AeBtn>
-            <span className="ae-sep" aria-hidden="true" />
-            <AeBtn label="Quote" title="Quote" on={!!fmt.quote} onClick={() => cmd("quote")}>
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 4.5h3.5v3.5c0 2-1 3.2-3 3.8M9 4.5h3.5v3.5c0 2-1 3.2-3 3.8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
-            </AeBtn>
-            <AeBtn label="Link" title="Link" on={linkOpen} onClick={() => { restoreRange(); setLinkOpen((v) => !v); }}>
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6.5 9.5 9.5 6.5M5.5 10.5l-1 1a2.5 2.5 0 0 1-3.5-3.5l2-2M10.5 5.5l1-1a2.5 2.5 0 0 1 3.5 3.5l-2 2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
-            </AeBtn>
-            <AeBtn label="Image" title="Insert image" on={false} onClick={() => imgRef.current?.click()}>
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3" /><circle cx="5.5" cy="6.5" r="1" fill="currentColor" /><path d="m3.5 11 3-3 2.5 2.5 1.5-1.5 2 2" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg>
-            </AeBtn>
-            <AeBtn label="Clear formatting" title="Clear formatting" on={false} onClick={() => cmd("removeFormat")}>
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 3h8M8 3v9M5.5 13h5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
-            </AeBtn>
-          </div>
-          <div className="ae-link" ref={linkRef} hidden={!linkOpen}>
-            <label className="sr-only" htmlFor="ae-url">Link address</label>
-            <input id="ae-url" ref={urlRef} type="url" inputMode="url" autoComplete="off" placeholder="Paste a link, e.g. https://example.com" value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); applyLink(); } if (e.key === "Escape") { e.preventDefault(); setLinkOpen(false); } }} />
-            <button type="button" className="btn-dark" onClick={applyLink}>Apply</button>
-            <button type="button" className="btn-text" onClick={() => setLinkOpen(false)}>Cancel</button>
-          </div>
-          <div
-            className={`ae-doc${n === 0 ? " empty" : ""}`}
-            id="ae-doc"
-            ref={docRef}
-            contentEditable
-            role="textbox"
-            aria-multiline="true"
-            aria-labelledby="ab-title"
-            data-ph="Start writing… paragraph text, headings, bullet points."
-            suppressContentEditableWarning
-            onInput={refresh}
-            onKeyUp={saveRange}
-            onMouseUp={saveRange}
-            onPaste={(e) => {
-              e.preventDefault();
-              const cd = e.clipboardData || (window as unknown as { clipboardData: DataTransfer }).clipboardData;
-              document.execCommand("insertText", false, cd.getData("text/plain"));
-            }}
-            onKeyDown={(e) => {
-              if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
-              const k = e.key.toLowerCase();
-              const map: Record<string, string> = { b: "bold", i: "italic", u: "underline" };
-              if (map[k]) {
-                e.preventDefault();
-                cmd(map[k]);
-              }
-            }}
-          />
-          <div className="ae-foot">
-            <span className="ae-tip">Tip: highlight text, then click <b>B</b>, <i>I</i> or <u>U</u>. Or click one first and start typing.</span>
-            <span id="ae-words">{n} {n === 1 ? "word" : "words"}{n ? ` · ${Math.max(1, Math.round(n / 200))} min read` : ""}</span>
-          </div>
-          <input
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            hidden
-            ref={imgRef}
-            onChange={(e) => {
-              readImg(e.target.files?.[0]);
-              e.target.value = "";
-            }}
-          />
-        </div>
-        <div className="pf-field ab-ex">
-          <div className="seo-lr">
-            <label htmlFor="ar-excerpt">Excerpt <span className="opt-note" id="ar-ex-mode">{auto ? "(Auto-generated from the article)" : "(Written by you)"}</span></label>
-            <button type="button" className="btn-text" hidden={!auto} style={{ fontSize: 12 }} onClick={() => { setEx(seoTwo(aeTextNow()).slice(0, 200)); setAuto(true); }}>
-              Use article opening
+    <>
+      <dialog
+        className="modal modal-product modal-article"
+        id="dlg-article"
+        ref={ref}
+        aria-labelledby="ar-title"
+        aria-describedby="ar-sub"
+        onClose={handleClose}
+        onClick={(e) => {
+          if (!(e.target as HTMLElement).closest(".ae-more-wrap")) setMoreOpen(false);
+          if (e.target === e.currentTarget) ref.current?.close();
+        }}
+      >
+        <form id="ar-form" noValidate onSubmit={submit}>
+          <div className="ar-head">
+            <span className="ar-hic" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
+                <rect x="3" y="2" width="10" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
+                <path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+              </svg>
+            </span>
+            <div>
+              <h2 id="ar-title">{edit ? "Edit Article" : "Create New Article"}</h2>
+              <p id="ar-sub">
+                {edit ? "Update this article’s content, SEO and metadata" : "Write and publish a new article with SEO and metadata"}
+              </p>
+            </div>
+            <button type="button" className="icon-btn" aria-label="Close" onClick={() => ref.current?.close()}>
+              {icon("i-close", 18, 18, "0 0 16 16")}
             </button>
           </div>
-          <textarea
-            className="pf-input"
-            id="ar-excerpt"
-            maxLength={200}
-            placeholder="Fills in automatically as you write. You can also write your own short summary."
-            value={ex}
-            onChange={(e) => { setAuto(false); setEx(e.target.value); }}
-            onBlur={(e) => { if (!e.target.value.trim()) { setEx(seoTwo(aeTextNow()).slice(0, 200)); setAuto(true); } }}
-          />
-          <div className="seo-lr" style={{ marginTop: 4 }}>
-            <span className="px-help" style={{ margin: 0 }}>Shown in search results and when the article is shared.</span>
-            <span className="pf-count" aria-live="polite" style={{ margin: 0 }}>{ex.length}/200</span>
-          </div>
-        </div>
-      </div>
-      <div className="seo-foot">
-        <span />
-        <span className="seo-actions">
-          <button type="button" className="btn-outline pf-btn" onClick={() => { savedRef.current = false; ref.current?.close(); }}>Cancel</button>
-          <button type="button" className="btn-primary pf-btn" onClick={() => { savedRef.current = true; ref.current?.close(); }}>Done</button>
-        </span>
-      </div>
-    </dialog>
-  );
-}
 
-function AeBtn({ label, title, on, onClick, children }: { label: string; title: string; on: boolean; onClick: () => void; children: ReactNode }) {
-  return (
-    <button type="button" className="ae-tb" aria-label={label} title={title} aria-pressed={on} onMouseDown={(e) => e.preventDefault()} onClick={onClick}>
-      {children}
-    </button>
+          <section className="ar-box" aria-labelledby="ar-box-h">
+            <h3 className="ar-box-h" id="ar-box-h">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <rect x="3" y="2" width="10" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.4" />
+                <path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+              </svg>
+              Article Information
+            </h3>
+            <div className="ar-grid">
+              <div className="pf-field">
+                <label htmlFor="ar-name">Article Title:<span className="req" aria-hidden="true">*</span></label>
+                <input
+                  ref={nameRef}
+                  className="pf-input"
+                  id="ar-name"
+                  maxLength={100}
+                  autoComplete="off"
+                  placeholder="e.g. 5 Tips for Raising Healthy Broilers"
+                  required
+                  value={name}
+                  aria-invalid={!!err("ar-name")}
+                  onChange={(e) => {
+                    clearErr("ar-name");
+                    const v = e.target.value;
+                    setName(v);
+                    if (!slugEdited) {
+                      setSlug(slugify(v).slice(0, 80));
+                      clearErr("ar-slug");
+                    }
+                  }}
+                />
+                <p className="pf-err" hidden={!err("ar-name")}>{err("ar-name")}</p>
+              </div>
+              <div className="pf-field">
+                <label htmlFor="ar-slug">URL Slug:<span className="req" aria-hidden="true">*</span></label>
+                <div className="pf-box ar-slug" aria-invalid={!!err("ar-slug")}>
+                  <span aria-hidden="true">/blog/</span>
+                  <input
+                    id="ar-slug"
+                    autoComplete="off"
+                    spellCheck={false}
+                    maxLength={80}
+                    placeholder="5-tips-raising-broilers"
+                    required
+                    value={slug}
+                    aria-describedby={err("ar-slug") ? "ar-slug-err" : undefined}
+                    onChange={(e) => {
+                      setSlugEdited(true);
+                      clearErr("ar-slug");
+                      setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-{2,}/g, "-"));
+                    }}
+                  />
+                  <i className="ar-ok" hidden={!slugOk}>
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-label="Slug is available">
+                      <circle cx="8" cy="8" r="6.3" stroke="#1fae5b" strokeWidth="1.4" />
+                      <path d="m5.4 8.1 1.8 1.8 3.4-3.6" stroke="#1fae5b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </i>
+                </div>
+                <p className="ar-hint">The slug will be used in your article URL.</p>
+                <p className="pf-err" id="ar-slug-err" hidden={!err("ar-slug")}>{err("ar-slug")}</p>
+              </div>
+            </div>
+
+            <div className="ar-feat">
+              <span className="ar-lbl" id="ar-feat-l">Featured Image</span>
+              <div className="ar-imgs">
+                <span className={`ar-thumb${img ? "" : " empty"}`} id="ar-thumb" role="img" aria-label="Featured image preview">
+                  {img ? <img src={img} alt="" onError={(e) => e.currentTarget.remove()} /> : icon("i-image", 26, 26, "0 0 24 24")}
+                </span>
+                <label
+                  className={`ar-pick${drag ? " drag" : ""}`}
+                  id="ar-drop"
+                  onDragEnter={(e) => {
+                    e.preventDefault();
+                    setDrag(true);
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setDrag(true);
+                  }}
+                  onDragLeave={() => setDrag(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setDrag(false);
+                    takeImg(e.dataTransfer.files?.[0]);
+                  }}
+                >
+                  <input
+                    ref={featFileRef}
+                    type="file"
+                    id="ar-file"
+                    accept="image/png,image/jpeg,image/webp"
+                    aria-labelledby="ar-feat-l ar-pick-l"
+                    onChange={(e) => {
+                      takeImg(e.target.files?.[0]);
+                      e.target.value = "";
+                    }}
+                  />
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M20 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                    <path d="m4 17 4.5-4.5 3.5 3.5 2-2 4 4" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+                    <circle cx="9" cy="9" r="1.4" fill="currentColor" />
+                    <path d="M18 3v6M15 6h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                  </svg>
+                  <strong id="ar-pick-l">{img ? "Change Image" : "Upload Image"}</strong>
+                  <small>Recommended size: 140 × 140px JPG, PNG (Max 5MB)</small>
+                </label>
+                <button type="button" className="btn-text" id="ar-img-remove" hidden={!img} onClick={() => setImg(null)}>Remove</button>
+              </div>
+              <p className="pf-err" id="ar-img-err" role="alert" hidden={!imgErr}>{imgErr}</p>
+            </div>
+
+            <div className="ar-te">
+              <span className="ar-lbl" id="ae-lbl">Text Editor<span className="req" aria-hidden="true">*</span></span>
+              <div className="ae" id="ae">
+                <div
+                  className="ae-bar"
+                  role="toolbar"
+                  aria-label="Formatting"
+                  aria-controls="ae-doc"
+                  onMouseDown={(e) => {
+                    if ((e.target as HTMLElement).closest(".ae-tb, .ae-mi")) e.preventDefault();
+                  }}
+                  onClick={(e) => {
+                    const b = (e.target as HTMLElement).closest("[data-ae]") as HTMLElement | null;
+                    if (!b) return;
+                    const c = b.getAttribute("data-ae") || "";
+                    restoreRange();
+                    if (c === "link") {
+                      setLinkOpen(true);
+                      setUrl("");
+                      requestAnimationFrame(() => urlRef.current?.focus());
+                      return;
+                    }
+                    if (c === "insertImage") {
+                      inlineImgRef.current?.click();
+                      return;
+                    }
+                    runCmd(c);
+                  }}
+                >
+                  <label className="sr-only" htmlFor="ae-block">Text style</label>
+                  <select
+                    className="ae-block"
+                    id="ae-block"
+                    value={block}
+                    onChange={(e) => {
+                      restoreRange();
+                      document.execCommand("formatBlock", false, e.target.value);
+                      refreshDoc();
+                      aeState();
+                    }}
+                  >
+                    <option value="p">Paragraph</option>
+                    <option value="h2">Heading</option>
+                    <option value="h3">Subheading</option>
+                  </select>
+                  <span className="ae-sep" aria-hidden="true" />
+                  <button type="button" className="ae-tb" data-ae="bold" aria-label="Bold" title="Bold (Ctrl+B)" aria-pressed={!!fmt.bold}>
+                    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4.5 3h4.2a2.6 2.6 0 0 1 0 5.2H4.5zM4.5 8.2h4.8a2.6 2.6 0 0 1 0 5.3H4.5z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" /></svg>
+                  </button>
+                  <button type="button" className="ae-tb" data-ae="italic" aria-label="Italic" title="Italic (Ctrl+I)" aria-pressed={!!fmt.italic}>
+                    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M10 3H6.5M9.5 13H6M9 3 7 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+                  </button>
+                  <button type="button" className="ae-tb" data-ae="underline" aria-label="Underline" title="Underline (Ctrl+U)" aria-pressed={!!fmt.underline}>
+                    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4.5 2.5v5a3.5 3.5 0 0 0 7 0v-5M3.5 14h9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+                  </button>
+                  <span className="ae-sep" aria-hidden="true" />
+                  <button type="button" className="ae-tb" data-ae="justifyLeft" aria-label="Align left" title="Align left" aria-pressed={!!fmt.justifyLeft}>
+                    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2.5 3.5h11M2.5 6.5h7M2.5 9.5h11M2.5 12.5h7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
+                  </button>
+                  <button type="button" className="ae-tb" data-ae="justifyCenter" aria-label="Align centre" title="Align centre" aria-pressed={!!fmt.justifyCenter}>
+                    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2.5 3.5h11M4.5 6.5h7M2.5 9.5h11M4.5 12.5h7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
+                  </button>
+                  <button type="button" className="ae-tb" data-ae="justifyRight" aria-label="Align right" title="Align right" aria-pressed={!!fmt.justifyRight}>
+                    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2.5 3.5h11M6.5 6.5h7M2.5 9.5h11M6.5 12.5h7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
+                  </button>
+                  <span className="ae-sep" aria-hidden="true" />
+                  <button type="button" className="ae-tb" data-ae="insertUnorderedList" aria-label="Bullet list" title="Bullet list" aria-pressed={!!fmt.insertUnorderedList}>
+                    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="3" cy="4" r="1" fill="currentColor" /><circle cx="3" cy="8" r="1" fill="currentColor" /><circle cx="3" cy="12" r="1" fill="currentColor" /><path d="M6 4h7.5M6 8h7.5M6 12h7.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+                  </button>
+                  <button type="button" className="ae-tb" data-ae="insertOrderedList" aria-label="Numbered list" title="Numbered list" aria-pressed={!!fmt.insertOrderedList}>
+                    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2.4 3.2 3.4 2.6V6M2.3 13.4h2l-1.9-2.2c.6-.8 1.9-.6 1.9.3M6.5 4h7M6.5 8h7M6.5 12h7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  </button>
+                  <span className="ae-sep" aria-hidden="true" />
+                  <button type="button" className="ae-tb" data-ae="link" aria-label="Add link" title="Add link" aria-pressed={linkOpen}>
+                    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6.8 9.2a2.6 2.6 0 0 0 3.7 0l2.2-2.2a2.6 2.6 0 0 0-3.7-3.7l-.8.8M9.2 6.8a2.6 2.6 0 0 0-3.7 0L3.3 9a2.6 2.6 0 0 0 3.7 3.7l.8-.8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
+                  </button>
+                  <button type="button" className="ae-tb" data-ae="insertImage" aria-label="Insert image" title="Insert image" aria-pressed={false}>
+                    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3" /><circle cx="5.6" cy="6.4" r="1.2" fill="currentColor" /><path d="m2.5 12 3.8-3.8 2.6 2.6 1.8-1.8 3 3" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg>
+                  </button>
+                  <span className="ae-more-wrap">
+                    <button
+                      type="button"
+                      className="ae-tb"
+                      id="ae-more-btn"
+                      aria-label="More formatting"
+                      title="More"
+                      aria-haspopup="menu"
+                      aria-expanded={moreOpen}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMoreOpen((v) => !v);
+                      }}
+                    >
+                      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="3.5" r="1.2" fill="currentColor" /><circle cx="8" cy="8" r="1.2" fill="currentColor" /><circle cx="8" cy="12.5" r="1.2" fill="currentColor" /></svg>
+                    </button>
+                    <span className="ae-more" id="ae-more" role="menu" hidden={!moreOpen}>
+                      <button
+                        type="button"
+                        className="ae-mi"
+                        role="menuitem"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMoreOpen(false);
+                          restoreRange();
+                          runCmd("quote");
+                        }}
+                      >
+                        Quote
+                      </button>
+                      <button
+                        type="button"
+                        className="ae-mi"
+                        role="menuitem"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMoreOpen(false);
+                          restoreRange();
+                          runCmd("removeFormat");
+                        }}
+                      >
+                        Clear formatting
+                      </button>
+                    </span>
+                  </span>
+                </div>
+                <div className="ae-link" id="ae-link" hidden={!linkOpen}>
+                  <label className="sr-only" htmlFor="ae-url">Link address</label>
+                  <input
+                    id="ae-url"
+                    ref={urlRef}
+                    type="url"
+                    inputMode="url"
+                    autoComplete="off"
+                    placeholder="Paste a link, e.g. https://example.com"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        applyLink();
+                      }
+                      if (e.key === "Escape") {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setLinkOpen(false);
+                        restoreRange();
+                      }
+                    }}
+                  />
+                  <button type="button" className="btn-dark" id="ae-link-ok" onClick={applyLink}>Apply</button>
+                  <button type="button" className="btn-text" id="ae-link-x" onClick={() => { setLinkOpen(false); restoreRange(); }}>Cancel</button>
+                </div>
+                <div
+                  className={`ae-doc${aeEmpty ? " empty" : ""}`}
+                  id="ae-doc"
+                  ref={docRef}
+                  contentEditable
+                  role="textbox"
+                  aria-multiline="true"
+                  aria-labelledby="ae-lbl"
+                  data-ph="Start writing… paragraph text, headings, bullet points."
+                  suppressContentEditableWarning
+                  onInput={refreshDoc}
+                  onKeyUp={(e) => {
+                    if (e.ctrlKey || e.metaKey) aeState();
+                  }}
+                  onMouseUp={saveRange}
+                  onFocus={() => {
+                    try {
+                      document.execCommand("styleWithCSS", false, "false");
+                    } catch {
+                      /* older browsers */
+                    }
+                  }}
+                  onPaste={(e) => {
+                    e.preventDefault();
+                    const cd = e.clipboardData || (window as unknown as { clipboardData: DataTransfer }).clipboardData;
+                    document.execCommand("insertText", false, cd.getData("text/plain"));
+                  }}
+                  onKeyDown={(e) => {
+                    if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
+                    const k = e.key.toLowerCase();
+                    if (k === "k") {
+                      e.preventDefault();
+                      setLinkOpen(true);
+                      setUrl("");
+                      requestAnimationFrame(() => urlRef.current?.focus());
+                      return;
+                    }
+                    const map: Record<string, string> = { b: "bold", i: "italic", u: "underline" };
+                    if (map[k]) {
+                      e.preventDefault();
+                      runCmd(map[k]);
+                    }
+                  }}
+                />
+                <input
+                  type="file"
+                  id="ae-img"
+                  accept="image/png,image/jpeg,image/webp"
+                  hidden
+                  ref={inlineImgRef}
+                  onChange={(e) => {
+                    readInlineImg(e.target.files?.[0]);
+                    e.target.value = "";
+                  }}
+                />
+              </div>
+              <p className="pf-err" id="ae-err" hidden={!aeErr}>{aeErr}</p>
+            </div>
+          </section>
+
+          <div className="pf-seo">
+            <div className="ps-head">
+              <span className="ps-badge" aria-hidden="true">{icon("i-search", 16, 16, "0 0 16 16")}</span>
+              <span className="ps-label">Search engine listing<small>How this article appears on Google and when shared</small></span>
+              <button type="button" className="ps-edit" id="ar-seo-open" onClick={() => setSeoOpen(true)}>
+                {I_PENCIL_12}
+                Edit SEO
+              </button>
+            </div>
+            <ArticleSeoCard site={site} title={seo.title} meta={seo.meta} slugPath={slugPath()} index={seo.index} />
+          </div>
+          <div className="pf-foot">
+            <button type="button" className="btn-outline pf-btn" onClick={() => ref.current?.close()}>Cancel</button>
+            <button type="submit" className="btn-primary pf-btn" id="ar-submit">{edit ? "Save Changes" : "Add Article"}</button>
+          </div>
+        </form>
+      </dialog>
+
+      <ArticleSeoDialog
+        open={seoOpen}
+        site={site}
+        name={name}
+        seo={{ ...seo, slug: slugPath() }}
+        img={img}
+        onClose={(saved, next) => {
+          setSeoOpen(false);
+          if (saved && next) {
+            const sl = next.slug.trim().replace(/^\/?(blog\/)?/, "").toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-{2,}/g, "-").replace(/^-+|-+$/g, "");
+            if (sl && sl !== slug.trim()) {
+              setSlug(sl);
+              setSlugEdited(true);
+              clearErr("ar-slug");
+            }
+            setSeo({ ...next, slug: "/blog/" + (sl || slug.trim()) });
+          }
+        }}
+      />
+    </>
   );
 }
 
@@ -2698,7 +2760,7 @@ function ArticleSeoDialog({
   };
 
   return (
-    <dialog className="modal modal-seo" ref={ref} aria-labelledby="aseo-title" onClose={handleClose} onClick={(e) => { if (e.target === e.currentTarget) ref.current?.close(); }} hidden={!open}>
+    <dialog className="modal modal-seo" id="dlg-aseo" ref={ref} aria-labelledby="aseo-title" onClose={handleClose} onClick={(e) => { if (e.target === e.currentTarget) ref.current?.close(); }} hidden={!open}>
       <div className="seo-head">
         <div>
           <h2 id="aseo-title">Search engine listing</h2>
@@ -2710,22 +2772,22 @@ function ArticleSeoDialog({
       </div>
       <div className="seo-body">
         <div className="seo-stage" aria-label="Google preview">
-          <div className="seo-q">{icon("i-search", 14, 14, "0 0 16 16")}<span>{name.trim().toLowerCase() || "your article"}</span></div>
+          <div className="seo-q">{icon("i-search", 14, 14, "0 0 16 16")}<span id="agp-q">{name.trim().toLowerCase() || "your article"}</span></div>
           <div className={`seo-res${draft.index ? "" : " off"}`}>
             <div className="ps-top">
-              <span className="gp-fav">{ini}</span>
-              <span className="ps-site"><b>{site.name}</b><span>{url}</span></span>
+              <span className="gp-fav" id="agp-fav">{ini}</span>
+              <span className="ps-site"><b id="agp-sn">{site.name}</b><span id="agp-url">{url}</span></span>
             </div>
-            <div className="seo-rt">{T}</div>
-            <div className="seo-rd">{D}</div>
+            <div className="seo-rt" id="agp-t">{T}</div>
+            <div className="seo-rd" id="agp-d">{D}</div>
           </div>
-          <p className="seo-note" hidden={draft.index}>This page is hidden from Google. People with the link can still open it.</p>
+          <p className="seo-note" id="agp-off" hidden={draft.index}>This page is hidden from Google. People with the link can still open it.</p>
         </div>
         <div className="seo-fields">
           <div className="pf-field">
             <div className="seo-lr">
               <label htmlFor="ar-seo-title">Meta title</label>
-              <span className={draft.title.length > SEO_T ? "over" : ""}>{draft.title.length} / {SEO_T}</span>
+              <span id="aseo-c-title" className={draft.title.length > SEO_T ? "over" : ""}>{draft.title.length} / {SEO_T}</span>
             </div>
             <input
               className="pf-input"
@@ -2735,12 +2797,12 @@ function ArticleSeoDialog({
               value={draft.title}
               onChange={(e) => setDraft((s) => ({ ...s, title: e.target.value, auto: { ...s.auto, title: false } }))}
             />
-            <div className="seo-meter"><i className={draft.title.length > SEO_T ? "over" : ""} style={{ width: `${Math.min(100, (draft.title.length / SEO_T) * 100)}%` }} /></div>
+            <div className="seo-meter"><i id="aseo-bar-title" className={draft.title.length > SEO_T ? "over" : ""} style={{ width: `${Math.min(100, (draft.title.length / SEO_T) * 100)}%` }} /></div>
           </div>
           <div className="pf-field">
             <div className="seo-lr">
               <label htmlFor="ar-seo-meta">Meta description</label>
-              <span className={draft.meta.length > SEO_D ? "over" : ""}>{draft.meta.length} / {SEO_D}</span>
+              <span id="aseo-c-meta" className={draft.meta.length > SEO_D ? "over" : ""}>{draft.meta.length} / {SEO_D}</span>
             </div>
             <textarea
               className="pf-input"
@@ -2749,19 +2811,19 @@ function ArticleSeoDialog({
               value={draft.meta}
               onChange={(e) => setDraft((s) => ({ ...s, meta: e.target.value, auto: { ...s.auto, meta: false } }))}
             />
-            <div className="seo-meter"><i className={draft.meta.length > SEO_D ? "over" : ""} style={{ width: `${Math.min(100, (draft.meta.length / SEO_D) * 100)}%` }} /></div>
+            <div className="seo-meter"><i id="aseo-bar-meta" className={draft.meta.length > SEO_D ? "over" : ""} style={{ width: `${Math.min(100, (draft.meta.length / SEO_D) * 100)}%` }} /></div>
           </div>
           <div className="sx-list">
             <div className="sx">
               <button type="button" className="sx-row" aria-expanded={slugOpen} aria-controls="ar-sx-slug" onClick={() => setSlugOpen((v) => !v)}>
                 <span className="sx-k">URL slug</span>
-                <span className="sx-v">{domain + (slugPathVal ? "/" + slugPathVal.replace(/^\/+/, "") : "")}</span>
+                <span className="sx-v" id="ar-sxv-slug">{domain + (slugPathVal ? "/" + slugPathVal.replace(/^\/+/, "") : "")}</span>
                 <span className="sx-act">{slugOpen ? "Done" : "Edit"}</span>
               </button>
               <div className="sx-body" id="ar-sx-slug" hidden={!slugOpen}>
                 <label className="sr-only" htmlFor="ar-seo-slug">URL slug</label>
                 <div className="pf-box">
-                  <span className="seo-dom">{domain}</span>
+                  <span className="seo-dom" id="aseo-dom">{domain}</span>
                   <input id="ar-seo-slug" autoComplete="off" spellCheck={false} placeholder="/blog/5-tips-raising-broilers" value={draft.slug} onChange={(e) => setDraft((s) => ({ ...s, slug: e.target.value }))} />
                 </div>
               </div>
@@ -2769,7 +2831,7 @@ function ArticleSeoDialog({
             <div className="sx">
               <button type="button" className="sx-row" aria-expanded={ogOpen} aria-controls="ar-sx-og" onClick={() => setOgOpen((v) => !v)}>
                 <span className="sx-k">Social share image</span>
-                <span className="sx-v">
+                <span className="sx-v" id="ar-sxv-og">
                   <span className="sx-thumb">{ogImg ? <img src={ogImg} alt="" /> : null}</span>
                   {useImg ? (img ? "Featured banner image" : "Featured banner image (none added yet)") : og ? "Custom image" : "No image yet"}
                 </span>
@@ -2777,28 +2839,28 @@ function ArticleSeoDialog({
               </button>
               <div className="sx-body" id="ar-sx-og" hidden={!ogOpen}>
                 <label className="ar-og-chk">
-                  <input type="checkbox" checked={useImg} onChange={(e) => setDraft((s) => ({ ...s, ogUse: e.target.checked }))} />
+                  <input type="checkbox" id="ar-og-use" checked={useImg} onChange={(e) => setDraft((s) => ({ ...s, ogUse: e.target.checked }))} />
                   {" "}Use featured banner image for WhatsApp/Social
                 </label>
-                <div className="ar-og-own" hidden={useImg}>
-                  <button type="button" className="ps-edit" onClick={() => ogFileRef.current?.click()}>Upload a different image</button>
-                  <button type="button" className="btn-text" hidden={!og} onClick={() => setOg(null)}>Remove</button>
-                  <input type="file" accept="image/png,image/jpeg,image/webp" hidden ref={ogFileRef} onChange={(e) => { readOg(e.target.files?.[0]); e.target.value = ""; }} />
+                <div className="ar-og-own" id="ar-og-own" hidden={useImg}>
+                  <button type="button" className="ps-edit" id="ar-og-pick" onClick={() => ogFileRef.current?.click()}>Upload a different image</button>
+                  <button type="button" className="btn-text" id="ar-og-clear" hidden={!og} onClick={() => setOg(null)}>Remove</button>
+                  <input type="file" id="ar-og-file" accept="image/png,image/jpeg,image/webp" hidden ref={ogFileRef} onChange={(e) => { readOg(e.target.files?.[0]); e.target.value = ""; }} />
                 </div>
                 <div className="ar-og" aria-label="Social share preview">
-                  <div className="ar-og-img">{ogImg ? <img src={ogImg} alt="" /> : <span>{useImg ? "Add a featured banner image to the article" : "Upload an image for social sharing"}</span>}</div>
+                  <div className="ar-og-img" id="ar-og-img">{ogImg ? <img src={ogImg} alt="" /> : <span>{useImg ? "Add a featured banner image to the article" : "Upload an image for social sharing"}</span>}</div>
                   <div className="ar-og-txt">
-                    <small>{domain.toUpperCase()}</small>
-                    <b>{T}</b>
-                    <span>{D}</span>
+                    <small id="ar-og-dom">{domain.toUpperCase()}</small>
+                    <b id="ar-og-t">{T}</b>
+                    <span id="ar-og-d">{D}</span>
                   </div>
                 </div>
               </div>
             </div>
             <label className="sx-row seo-switch" title="Hidden pages still work for people who have the link.">
               <span className="sx-k">Show on search engines</span>
-              <span className="sx-v">{draft.index ? "Visible on Google" : "Hidden from Google"}</span>
-              <input type="checkbox" role="switch" checked={draft.index} onChange={(e) => setDraft((s) => ({ ...s, index: e.target.checked }))} />
+              <span className="sx-v" id="ar-sxv-index">{draft.index ? "Visible on Google" : "Hidden from Google"}</span>
+              <input type="checkbox" id="ar-seo-index" role="switch" checked={draft.index} onChange={(e) => setDraft((s) => ({ ...s, index: e.target.checked }))} />
             </label>
           </div>
         </div>
@@ -2807,6 +2869,7 @@ function ArticleSeoDialog({
         <button
           type="button"
           className="btn-text"
+          id="ar-seo-reset"
           onClick={() => {
             setDraft((s) => ({ ...s, auto: { title: true, meta: true }, ogUse: true }));
             setOg(null);
@@ -2816,7 +2879,7 @@ function ArticleSeoDialog({
         </button>
         <span className="seo-actions">
           <button type="button" className="btn-outline pf-btn" onClick={() => { savedRef.current = false; ref.current?.close(); }}>Cancel</button>
-          <button type="button" className="btn-primary pf-btn" onClick={() => { savedRef.current = true; ref.current?.close(); }}>Save changes</button>
+          <button type="button" className="btn-primary pf-btn" id="ar-seo-save" onClick={() => { savedRef.current = true; ref.current?.close(); }}>Save changes</button>
         </span>
       </div>
     </dialog>
@@ -3508,7 +3571,9 @@ function CategoryDialog({
   const [slug, setSlug] = useState(edit?.slug ?? "");
   const [parent, setParent] = useState(edit?.parent ?? "");
   const [desc, setDesc] = useState(edit?.desc ?? "");
-  const [img, setImg] = useState<string | null>(edit?.img ?? null);
+  const [img, setImg] = useState<string | null>(
+    edit?.img ?? (edit?.photo ? photoUrl(edit.photo).replace("w=120&h=120", "w=280&h=280") : null),
+  );
   const [imgErr, setImgErr] = useState("");
   const [drag, setDrag] = useState(false);
   const [slugEdited, setSlugEdited] = useState(!!edit);
@@ -3601,56 +3666,53 @@ function CategoryDialog({
           </button>
         </div>
 
-        <label
-          className={`pf-drop${img ? " has-img" : ""}${drag ? " drag" : ""}`}
-          id="cf-drop"
-          onDragEnter={(e) => {
-            e.preventDefault();
-            setDrag(true);
-          }}
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDrag(true);
-          }}
-          onDragLeave={() => setDrag(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDrag(false);
-            take(e.dataTransfer.files?.[0]);
-          }}
-        >
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/png,image/jpeg"
-            aria-label="Upload category image"
-            onChange={(e) => {
-              take(e.target.files?.[0]);
-              e.target.value = "";
-            }}
-          />
-          <svg className="pf-dash" aria-hidden="true">
-            <rect x=".5" y=".5" rx="12" ry="12" />
-          </svg>
-          <span id="cf-drop-body" style={{ display: "contents" }}>
-            {img ? (
-              <img src={img} alt="Category image preview" />
-            ) : (
-              <>
-                {I_CLOUD}
-                <strong>Upload category image</strong>
-                <small>Drag and drop an image, or click to browse</small>
-                <small>JPG, PNG (max 5MB)</small>
-              </>
-            )}
-          </span>
-        </label>
-
-        <div className="pf-imgbar" hidden={!img}>
-          <button type="button" className="btn-text" onClick={() => fileRef.current?.click()}>Replace image</button>
-          <button type="button" className="btn-text" onClick={() => setImg(null)}>Remove</button>
+        <div className="ar-feat x-img">
+          <span className="ar-lbl" id="cf-img-l">Category Image</span>
+          <div className="ar-imgs">
+            <span className={`ar-thumb${img ? "" : " empty"}`} id="cf-thumb" role="img" aria-label="Category Image preview">
+              {img ? <img src={img} alt="" /> : icon("i-image", 26, 26, "0 0 24 24")}
+            </span>
+            <label
+              className={`ar-pick${drag ? " drag" : ""}`}
+              id="cf-drop"
+              onDragEnter={(e) => {
+                e.preventDefault();
+                setDrag(true);
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDrag(true);
+              }}
+              onDragLeave={() => setDrag(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDrag(false);
+                take(e.dataTransfer.files?.[0]);
+              }}
+            >
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/png,image/jpeg"
+                aria-labelledby="cf-img-l cf-pick-l"
+                onChange={(e) => {
+                  take(e.target.files?.[0]);
+                  e.target.value = "";
+                }}
+              />
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M20 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                <path d="m4 17 4.5-4.5 3.5 3.5 2-2 4 4" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+                <circle cx="9" cy="9" r="1.4" fill="currentColor" />
+                <path d="M18 3v6M15 6h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+              <strong id="cf-pick-l">{img ? "Change Image" : "Upload Image"}</strong>
+              <small>Recommended size: 140 × 140px JPG, PNG (Max 5MB)</small>
+            </label>
+            <button type="button" className="btn-text" id="cf-img-remove" hidden={!img} onClick={() => setImg(null)}>Remove</button>
+          </div>
+          <p className="pf-err" id="cf-img-err" role="alert" hidden={!imgErr}>{imgErr}</p>
         </div>
-        <p className="pf-err" role="alert" hidden={!imgErr} style={{ textAlign: "center" }}>{imgErr}</p>
 
         <div className="pf-fields cf-fields">
           <div className="pf-field">
@@ -5881,108 +5943,116 @@ function PixelsPanel({
 
 /* -------------------------------------------------- Danger Zone */
 
+const SDZ_IC = {
+  ban: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M7.32189 23.0552C5.86147 22.4253 4.59116 21.5704 3.51095 20.4906C2.43074 19.4108 1.57547 18.1411 0.945158 16.6813C0.315052 15.2215 0 13.6618 0 12.0022C0 10.3424 0.314947 8.78232 0.944842 7.32189C1.57474 5.86147 2.42958 4.59116 3.50937 3.51095C4.58916 2.43074 5.85895 1.57547 7.31874 0.945158C8.77853 0.315052 10.3382 0 11.9978 0C13.6576 0 15.2177 0.314947 16.6781 0.944842C18.1385 1.57474 19.4088 2.42958 20.4891 3.50937C21.5693 4.58916 22.4245 5.85895 23.0548 7.31874C23.6849 8.77853 24 10.3382 24 11.9978C24 13.6576 23.6851 15.2177 23.0552 16.6781C22.4253 18.1385 21.5704 19.4088 20.4906 20.4891C19.4108 21.5693 18.1411 22.4245 16.6813 23.0548C15.2215 23.6849 13.6618 24 12.0022 24C10.3424 24 8.78232 23.6851 7.32189 23.0552ZM12 22.1053C13.1851 22.1053 14.3263 21.9048 15.4238 21.504C16.5211 21.1032 17.5239 20.5231 18.4323 19.7637L4.23632 5.56768C3.48495 6.47611 2.90684 7.47895 2.502 8.57621C2.09716 9.67369 1.89474 10.8149 1.89474 12C1.89474 14.8211 2.87368 17.2105 4.83158 19.1684C6.78947 21.1263 9.17895 22.1053 12 22.1053ZM19.7637 18.4323C20.5231 17.5239 21.1032 16.5211 21.504 15.4238C21.9048 14.3263 22.1053 13.1851 22.1053 12C22.1053 9.17895 21.1263 6.78947 19.1684 4.83158C17.2105 2.87368 14.8211 1.89474 12 1.89474C10.812 1.89474 9.668 2.09316 8.568 2.49C7.46821 2.88663 6.46811 3.46874 5.56768 4.23632L19.7637 18.4323Z" fill="currentColor" />
+    </svg>
+  ),
+  swap: (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path d="M3 7h13l-3.5-3.5M17 13H4l3.5 3.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  trash: (
+    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path d="M3.5 5.5h13M8 5.5V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5M5 5.5l.8 10.6a1 1 0 0 0 1 .9h6.4a1 1 0 0 0 1-.9L15 5.5M8.5 9v5M11.5 9v5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  up: icon("i-publishing", 20, 20, "0 0 16 16"),
+};
+
+const SDZ_X = (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path d="M12 4 4 12M4 4l8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+  </svg>
+);
+
 function DangerPanel({
   status,
   live,
+  domain,
+  siteName,
   workspaceName,
   otherWorkspaces,
   counts,
+  onRepublish,
   onUnpublish,
   onTransfer,
   onDelete,
   onCreateWorkspace,
 }: {
-  status: "ready" | "setup" | "frozen" | "disabled";
+  status: string;
   live: boolean;
+  domain: string;
+  siteName: string;
   workspaceName: string;
   otherWorkspaces: Array<{ id: string; name: string; sites: number; members: number }>;
   counts: { pages: number; articles: number; products: number; orders: number };
+  onRepublish: () => void;
   onUnpublish: () => void;
   onTransfer: (toId: string) => void;
   onDelete: () => void;
   onCreateWorkspace: () => void;
 }) {
-  const [show, setShow] = useState<null | "unpub" | "trans" | "del">(null);
-  const canDel = !live && status !== "ready" && status !== "setup";
+  const [show, setShow] = useState<null | "unpublish" | "transfer" | "delete">(null);
   return (
     <>
-      <h2 className="ss-h br-h">Danger Zone</h2>
-      <p className="px-sub">Take irreversible actions. Unpublishing hides your site while keeping content. Deleting removes this site and its reference across workspaces.</p>
-      <div className="sdz">
-        <article className="sdz-card">
-          <header className="sdz-h">
-            <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <path d="M8 1.5 1.3 13.5h13.4L8 1.5Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-              <path d="M8 6v3.5M8 11.5h0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
-            <span>Unpublish Site</span>
-          </header>
-          <p>Take this site offline. All published pages, blog posts and the live URL will stop working. You can republish later.</p>
-          <ul className="sdz-list">
-            <li><b>Effect:</b> {live ? "Site becomes unpublished (hidden)" : "Already unpublished"}</li>
-            <li><b>Scope:</b> Content, pages and SEO remain in this workspace</li>
-          </ul>
-          <div className="sdz-act">
-            <button type="button" className="btn-outline sdz-btn" disabled={!live} onClick={() => setShow("unpub")}>
-              Unpublish Site
-            </button>
+      <h2 className="sdz-h">Danger Zone</h2>
+      <p className="sdz-sub">These actions are permanent and cannot be undone. Please proceed with caution.</p>
+      <div className="sdz-list">
+        <div className="sdz-row tint">
+          <span className="sdz-ic">{live ? SDZ_IC.ban : SDZ_IC.up}</span>
+          <div>
+            <strong>{live ? "Unpublish Site" : "Republish Site"}</strong>
+            <p>
+              {live
+                ? "Take your website offline temporarily. Visitors will no longer be able to access your site."
+                : "Your site is offline. Publish it again so visitors can reach it."}
+            </p>
+            <span className={`sdz-state${live ? " live" : ""}`}>
+              {live ? "Live now" : status === "draft" ? "Never published" : "Offline"}
+            </span>
           </div>
-        </article>
-        <article className="sdz-card">
-          <header className="sdz-h">
-            <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <path d="M2 8v6h12V8M1.5 5h13V8h-13z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-              <path d="M8 5V2.5M6 4h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-            </svg>
-            <span>Transfer Ownership</span>
-          </header>
-          <p>Move this site to another workspace you own or manage. The site’s content stays intact.</p>
-          <ul className="sdz-list">
-            <li><b>From:</b> {workspaceName}</li>
-            <li><b>To:</b> Choose a workspace below</li>
-          </ul>
-          <div className="sdz-act col">
-            {otherWorkspaces.length ? (
-              otherWorkspaces.map((w) => (
-                <button key={w.id} type="button" className="btn-outline sdz-btn block" onClick={() => setShow({ t: "trans", toId: w.id, toName: w.name } as any)}>
-                  Transfer to <b>{w.name}</b> <small>({w.sites} sites · {w.members} members)</small>
-                </button>
-              ))
-            ) : (
-              <button type="button" className="btn-outline sdz-btn block" onClick={onCreateWorkspace}>
-                Create new workspace
-              </button>
-            )}
+          <button
+            type="button"
+            className={`sdz-btn ghost${live ? "" : " calm"}`}
+            onClick={() => (live ? setShow("unpublish") : onRepublish())}
+          >
+            {live ? "Unpublish Site" : "Republish Site"}
+          </button>
+        </div>
+        <div className="sdz-row">
+          <span className="sdz-ic">{SDZ_IC.swap}</span>
+          <div>
+            <strong>Transfer Ownership</strong>
+            <p>Move site to another workspace. You will lose access to this site.</p>
           </div>
-        </article>
-        <article className="sdz-card bad">
-          <header className="sdz-h">
-            <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <path d="M2.5 3.5h11M6 3.5V2.5h4v1M3.5 5v8a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M6.5 7.5v4M9.5 7.5v4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-            </svg>
-            <span>Delete Site</span>
-          </header>
-          <p>This will permanently remove this site from the system. This action cannot be undone.</p>
-          <ul className="sdz-list">
-            <li><b>Counts:</b> {counts.pages} pages, {counts.articles} articles, {counts.products} products, {counts.orders} orders</li>
-            <li><b>Requires:</b> Site unpublished and status not &quot;Ready&quot;/&quot;Setup&quot;</li>
-          </ul>
-          <div className="sdz-act">
-            <button type="button" className="btn-outline sdz-btn bad" disabled={!canDel} onClick={() => setShow("del")} title={canDel ? undefined : "Unpublish and ensure status allows deletion."}>
-              Delete Permanently
-            </button>
+          <button type="button" className="sdz-btn ghost" onClick={() => setShow("transfer")}>Transfer Site</button>
+        </div>
+        <div className="sdz-row tint">
+          <span className="sdz-ic">{SDZ_IC.trash}</span>
+          <div>
+            <strong>Permanently Delete Site</strong>
+            <p>This action will permanently delete your site and all related data. This cannot be undone.</p>
           </div>
-        </article>
+          <button type="button" className="sdz-btn solid" onClick={() => setShow("delete")}>Delete Site</button>
+        </div>
       </div>
       <SiteDangerDialog
-        kind={show === "unpub" ? "unpub" : show === "del" ? "del" : (show as any)?.t === "trans" ? "trans" : null}
-        toName={(show as any)?.toName}
+        kind={show}
+        siteName={siteName}
+        domain={domain}
+        status={status}
+        workspaceName={workspaceName}
+        otherWorkspaces={otherWorkspaces}
+        counts={counts}
         onCancel={() => setShow(null)}
-        onConfirm={() => {
-          if (show === "unpub") onUnpublish();
-          if ((show as any)?.t === "trans") onTransfer((show as any).toId);
-          if (show === "del") onDelete();
+        onCreateWorkspace={onCreateWorkspace}
+        onConfirm={(toId) => {
+          if (show === "unpublish") onUnpublish();
+          if (show === "transfer" && toId) onTransfer(toId);
+          if (show === "delete") onDelete();
           setShow(null);
         }}
       />
@@ -5992,27 +6062,51 @@ function DangerPanel({
 
 function SiteDangerDialog({
   kind,
-  toName,
+  siteName,
+  domain,
+  status,
+  workspaceName,
+  otherWorkspaces,
+  counts,
   onCancel,
+  onCreateWorkspace,
   onConfirm,
 }: {
-  kind: "unpub" | "del" | "trans" | null;
-  toName?: string;
+  kind: "unpublish" | "transfer" | "delete" | null;
+  siteName: string;
+  domain: string;
+  status: string;
+  workspaceName: string;
+  otherWorkspaces: Array<{ id: string; name: string; sites: number; members: number }>;
+  counts: { pages: number; articles: number; products: number; orders: number };
   onCancel: () => void;
-  onConfirm: () => void;
+  onCreateWorkspace: () => void;
+  onConfirm: (toId?: string) => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const closingRef = useRef(false);
+  const [confirm, setConfirm] = useState("");
+  const [toId, setToId] = useState("");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setConfirm("");
+    setToId("");
+    setError("");
+  }, [kind]);
+
   useEffect(() => {
     const d = ref.current;
-    if (!d) return;
-    if (!kind) return;
+    if (!d || !kind) return;
     if (!d.open) d.showModal();
+    const f = (kind === "transfer" && otherWorkspaces.length) ? d.querySelector<HTMLInputElement>('[name="sd-to"]') : d.querySelector<HTMLInputElement>("#sd-confirm");
+    (kind !== "unpublish" && f ? f : d.querySelector<HTMLElement>(".btn-danger"))?.focus();
     return () => {
       if (d.open) closingRef.current = true;
       d.close();
     };
   }, [kind]);
+
   const handleClose = () => {
     if (closingRef.current) {
       closingRef.current = false;
@@ -6021,25 +6115,121 @@ function SiteDangerDialog({
     onCancel();
   };
   if (!kind) return null;
-  const t =
-    kind === "unpub" ? { title: "Unpublish Site", body: "Are you sure you want to unpublish this site? It will go offline for everyone.", ok: "Unpublish" } :
-    kind === "trans" ? { title: "Transfer Site", body: `Transfer this site to ${toName || "another workspace"}? The site stays intact but moves to the new workspace.`, ok: "Transfer" } :
-    { title: "Delete Site Permanently", body: "This action cannot be undone. All content and references for this site will be removed.", ok: "Delete Permanently" };
+
+  const typing = kind !== "unpublish";
+  const n = (k: number, one: string, many: string) => `${k} ${k === 1 ? one : many}`;
+  const ok = kind === "unpublish" ? true : confirm.trim() === siteName && (kind === "transfer" ? !!toId : true);
+  const label = kind === "unpublish" ? "Unpublish Site" : kind === "transfer" ? "Transfer Site" : "Delete Site";
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ok) return;
+    onConfirm(kind === "transfer" ? toId : undefined);
+  };
+
   return (
-    <dialog className="modal modal-danger" ref={ref} aria-labelledby="sdz-title" onClose={handleClose} onClick={(e) => { if (e.target === e.currentTarget) ref.current?.close(); }} hidden={!kind}>
-      <div className="pf-head">
-        <div>
-          <h2 id="sdz-title">{t.title}</h2>
-          <p>{t.body}</p>
+    <dialog
+      className="modal modal-danger"
+      id="dlg-site-danger"
+      ref={ref}
+      aria-labelledby="sd-title"
+      aria-describedby="sd-desc"
+      onClose={handleClose}
+      onClick={(e) => { if (e.target === e.currentTarget) ref.current?.close(); }}
+      hidden={!kind}
+    >
+      <form id="sd-form" noValidate onSubmit={submit}>
+        <div className="modal-head">
+          <div className="dh">
+            <span className={`dh-ic${kind === "transfer" ? " neutral" : ""}`} id="sd-ic">
+              {kind === "unpublish" ? SDZ_IC.ban : kind === "transfer" ? SDZ_IC.swap : SDZ_IC.trash}
+            </span>
+            <div>
+              <h2 id="sd-title">
+                {kind === "unpublish" ? <>Unpublish <span className="sd-name">{siteName}</span>?</>
+                  : kind === "transfer" ? <>Transfer <span className="sd-name">{siteName}</span></>
+                  : <>Delete <span className="sd-name">{siteName}</span>?</>}
+              </h2>
+              <p id="sd-desc">
+                {kind === "unpublish" ? `${domain} goes offline straight away. You can republish any time.`
+                  : kind === "transfer" ? <>Move this site out of <strong>{workspaceName}</strong>. Its team and settings go with it.</>
+                  : `This can’t be undone. Everything below is removed permanently.`}
+              </p>
+            </div>
+          </div>
+          <button type="button" className="icon-btn" aria-label="Close" onClick={() => ref.current?.close()}>
+            {icon("i-close", 16, 16, "0 0 16 16")}
+          </button>
         </div>
-        <button type="button" className="icon-btn" aria-label="Close" onClick={() => ref.current?.close()}>
-          {icon("i-close", 18, 18, "0 0 16 16")}
-        </button>
-      </div>
-      <div className="pf-foot">
-        <button type="button" className="btn-outline pf-btn" onClick={() => ref.current?.close()}>Cancel</button>
-        <button type="button" className={`btn-primary pf-btn${kind === "del" ? " bad" : ""}`} onClick={onConfirm}>{t.ok}</button>
-      </div>
+        <div className="modal-body">
+          <div id="sd-body">
+            {kind === "unpublish" ? (
+              <>
+                <ul className="dlist">
+                  <li>{SDZ_X}<span>Visitors see a <b>“Site not available”</b> page</span></li>
+                  <li>{SDZ_X}<span>Checkout stops, so <b>no new orders</b> come in</span></li>
+                  <li>{SDZ_X}<span>Search engines may drop your pages if it stays offline</span></li>
+                </ul>
+                <p className="role-note">Your pages, products, orders and settings stay exactly as they are.</p>
+              </>
+            ) : kind === "transfer" ? (
+              otherWorkspaces.length ? (
+                <>
+                  <fieldset style={{ border: 0, margin: 0, padding: 0 }}>
+                    <legend className="confirm-label">Move to workspace</legend>
+                    <div className="tlist">
+                      {otherWorkspaces.map((o) => (
+                        <label key={o.id}>
+                          <input type="radio" name="sd-to" value={o.id} checked={toId === o.id} onChange={() => setToId(o.id)} />
+                          <span className="wmark" style={{ ["--s" as string]: "32px" }} aria-hidden="true">{initials(o.name).slice(0, 1)}</span>
+                          <div>
+                            <strong>{o.name}</strong>
+                            <small>{o.sites} {o.sites === 1 ? "site" : "sites"} · {o.members} {o.members === 1 ? "member" : "members"}</small>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
+                  <p className="role-note" style={{ marginBottom: 16 }}>People in <strong>{workspaceName}</strong> who only had access through this workspace will lose access to the site.</p>
+                </>
+              ) : (
+                <div className="tempty">
+                  You don't have another workspace to move {siteName} into. Create one first, then come back.
+                  <div>
+                    <button type="button" className="btn-dark" onClick={() => { ref.current?.close(); onCreateWorkspace(); }}>
+                      {icon("i-plus", 18, 18, "0 0 18 18")}Create workspace
+                    </button>
+                  </div>
+                </div>
+              )
+            ) : (
+              <ul className="dlist">
+                <li>{SDZ_X}<span><b>{n(counts.pages, "page", "pages")}</b> and {n(counts.articles, "article", "articles")}</span></li>
+                <li>{SDZ_X}<span><b>{n(counts.products, "product", "products")}</b>, {n(counts.orders, "order", "orders")} and store settings</span></li>
+                <li>{SDZ_X}<span><b>All media</b>, branding and tracking settings</span></li>
+                <li>{SDZ_X}<span>The address <b>{domain}</b> stops working</span></li>
+              </ul>
+            )}
+          </div>
+          <label className="confirm-label" id="sd-confirm-label" htmlFor="sd-confirm" hidden={!typing}>
+            Type <code id="sd-word">{siteName}</code> to confirm
+          </label>
+          <input
+            className="auth-input confirm-input"
+            id="sd-confirm"
+            autoComplete="off"
+            spellCheck={false}
+            value={confirm}
+            onChange={(e) => { setError(""); setConfirm(e.target.value); }}
+            hidden={!typing}
+          />
+          <p className="alert-error" id="sd-error" role="alert" hidden={!error} style={{ marginTop: 12 }}>{error}</p>
+        </div>
+        <div className="modal-foot">
+          <button type="button" className="btn-outline btn-inline" onClick={() => ref.current?.close()}>Cancel</button>
+          <button type="submit" className="btn-danger" id="sd-submit" disabled={!ok}>{label}</button>
+        </div>
+      </form>
     </dialog>
   );
 }
@@ -6058,6 +6248,7 @@ export function SettingsView({
   status,
   workspaceName,
   otherWorkspaces,
+  onRepublish,
   onUnpublish,
   onTransfer,
   onDelete,
@@ -6074,9 +6265,10 @@ export function SettingsView({
   onConnect: (domain: string) => void;
   onPending: (domain: string) => void;
   counts: { pages: number; articles: number; products: number; orders: number };
-  status: "ready" | "setup" | "frozen" | "disabled";
+  status: string;
   workspaceName: string;
   otherWorkspaces: Array<{ id: string; name: string; sites: number; members: number }>;
+  onRepublish: () => void;
   onUnpublish: () => void;
   onTransfer: (toId: string) => void;
   onDelete: () => void;
@@ -6156,9 +6348,12 @@ export function SettingsView({
       <DangerPanel
         status={status}
         live={d.live}
+        domain={d.domain}
+        siteName={site.name}
         workspaceName={workspaceName}
         otherWorkspaces={otherWorkspaces}
         counts={counts}
+        onRepublish={onRepublish}
         onUnpublish={onUnpublish}
         onTransfer={onTransfer}
         onDelete={onDelete}

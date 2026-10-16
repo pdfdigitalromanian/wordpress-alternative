@@ -854,7 +854,7 @@ button:where(.btn-dark, .site-new)[disabled] { opacity: .5; cursor: not-allowed;
 .sic { width: 42px; height: 42px; border-radius: 10px; background: #d9e5e0; display: grid; place-items: center; flex-shrink: 0; color: var(--ink); }
 .sic.round { border-radius: 50%; }
 .sic .ws-av { position: relative; width: 28px; height: 28px; border-radius: 50%; background: #1c1c1a; color: #fff; display: grid; place-items: center; font-size: 10px; font-weight: 700; letter-spacing: .02em; }
-.sic .ws-av img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.sic .ws-av img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; max-width: none; border-radius: 50%; object-fit: cover; }
 .sic .ws-av .cam { position: absolute; right: -3px; bottom: -3px; width: 13px; height: 13px; border-radius: 50%; background: #fff; color: var(--ink); display: grid; place-items: center; box-shadow: 0 0 0 1px rgb(0 0 0 / .12); }
 .setcol .sbody { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .setcol .slabel { display: block; font-size: 14px; font-weight: 500; color: var(--ink); margin-top: 2px; }

@@ -31,6 +31,7 @@ import { CreateWorkspaceDialog, InviteDialog, Toast } from "~/components/workspa
 import { useResultToast } from "~/components/workspace-shell";
 import { Wmark } from "~/components/workspace-sidebar";
 import { handleWorkspaceAction } from "~/lib/workspace-actions.server";
+import type { WorkspaceRow } from "~/lib/workspace.server";
 import { slugify } from "~/lib/slugify";
 import { timeAgo } from "~/lib/workspace-view";
 import "./overview.css";
@@ -180,10 +181,12 @@ type SiteLite = { id: string; name: string; theme: string };
 /* The topbar site switcher: lists the active workspace's sites only. Opening it
    repeats the prototype's fitSwitcher()/placeCaret() behaviour. */
 function SiteSwitcher({
+  workspace,
   sites,
   activeSiteId,
   onSelect,
 }: {
+  workspace?: WorkspaceRow;
   sites: SiteLite[];
   activeSiteId: string | null;
   onSelect: (id: string) => void;
@@ -280,6 +283,20 @@ function SiteSwitcher({
 
       <div className="switcher-panel" id="switcher-panel" ref={panelRef} hidden={!open}>
         <div className="switcher-scroll" ref={scrollRef}>
+          <Link to="/workspace" className="sw-back" id="sw-back" onClick={() => close(false)}>
+            <span className="sw-back-arrow" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
+                <path d="M13 8H3.5M7.5 3.5 3 8l4.5 4.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </span>
+            <span className="sw-back-txt">
+              <strong>Back to workspace</strong>
+              <small id="sw-back-ws">{workspace ? `${workspace.name} · all sites, team & settings` : "All your workspaces"}</small>
+            </span>
+            <span className="sw-back-mark" id="sw-back-mark" aria-hidden="true">
+              {workspace ? <Wmark workspace={workspace} size={32} /> : null}
+            </span>
+          </Link>
           <div className="switcher-search">
             {icon("i-search")}
             <label className="sr-only" htmlFor="switcher-search">Search sites</label>
@@ -447,9 +464,10 @@ export default function Overview() {
   const [checkoutBySite, setCheckoutBySite] = useState<Record<string, Checkout>>({});
   const [brandingBySite, setBrandingBySite] = useState<Record<string, Branding>>({});
   const [pixelsBySite, setPixelsBySite] = useState<Record<string, Pixels>>({});
-  // Danger Zone: owner unpublished the site (live flips off) and/or moved it
-  // to another workspace or deleted it — local overrides on top of siteData().
-  const [unpublishedBySite, setUnpublishedBySite] = useState<Record<string, boolean>>({});
+  // Danger Zone: owner unpublished or republished the site (live flips off/on)
+  // and/or moved it to another workspace or deleted it — local overrides on
+  // top of siteData().
+  const [publishOverrideBySite, setPublishOverrideBySite] = useState<Record<string, "published" | "unpublished">>({});
   const [removedSiteIds, setRemovedSiteIds] = useState<Record<string, string>>({}); // siteId -> new workspace id ("deleted" if removed)
   // Domain connected from Site Settings, per site, so the topbar reflects it.
   const [domainBySite, setDomainBySite] = useState<Record<string, string>>({});
@@ -482,11 +500,11 @@ export default function Overview() {
         ? siteData({
             ...activeSite,
             domain: domainBySite[activeSite.id],
-            // Owner unpublished via the Danger Zone: flip live off without a full reload.
-            ...(unpublishedBySite[activeSite.id] ? { status: "unpublished" as const } : {}),
+            // Owner unpublished/republished via the Danger Zone: flip live without a full reload.
+            ...(publishOverrideBySite[activeSite.id] ? { status: publishOverrideBySite[activeSite.id] } : {}),
           })
         : null,
-    [activeSite, domainBySite, unpublishedBySite],
+    [activeSite, domainBySite, publishOverrideBySite],
   );
 
   const sitePages: WebPage[] = useMemo(
@@ -755,7 +773,7 @@ export default function Overview() {
         </div>
 
         <nav className="crumbs" aria-label="Breadcrumb">
-          <SiteSwitcher sites={SITES} activeSiteId={activeSiteId} onSelect={selectSite} />
+          <SiteSwitcher workspace={activeWorkspace} sites={SITES} activeSiteId={activeSiteId} onSelect={selectSite} />
 
           <div className="tb-extras">
             <a
@@ -1056,14 +1074,19 @@ export default function Overview() {
                   products: siteProducts.length,
                   orders: siteOrders.length,
                 }}
-                status={(activeSite.status as "ready" | "setup" | "frozen" | "disabled") ?? "ready"}
+                status={activeSite.status ?? "published"}
                 workspaceName={activeWorkspace?.name ?? "This workspace"}
                 otherWorkspaces={data.workspaces
                   .filter((w) => w.id !== activeWorkspace?.id)
                   .map((w) => ({ id: w.id, name: w.name, sites: w.sites.length, members: w.members.length }))}
+                onRepublish={() => {
+                  if (!activeSite) return;
+                  setPublishOverrideBySite((m) => ({ ...m, [activeSite.id]: "published" }));
+                  showToast(`${activeSite.name} is live again.`);
+                }}
                 onUnpublish={() => {
                   if (!activeSite) return;
-                  setUnpublishedBySite((m) => ({ ...m, [activeSite.id]: true }));
+                  setPublishOverrideBySite((m) => ({ ...m, [activeSite.id]: "unpublished" }));
                   showToast(`${activeSite.name} unpublished. It is offline until you publish again.`);
                 }}
                 onTransfer={(toId) => {

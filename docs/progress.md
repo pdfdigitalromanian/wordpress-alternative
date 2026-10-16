@@ -865,3 +865,104 @@ add → 4 rows, switch toggle, remove → 3 rows, dirty note). Zero
 console/page errors. The temp scripts/screenshots were removed after the
 run, so no new committed e2e coverage exists (consistent with the rest of
 the overview screens).
+
+### Content, Danger Zone and editor/SEO CSS exact-match pass - 15 October 2026
+
+Follow-up fidelity pass so the Content view, the article add/edit +
+Content Body editor + SEO sub-dialogs, and the Danger Zone read
+**rule-for-rule** identical to `wp.html`, not merely close.
+
+- **Content list + editor + SEO CSS replaced one-for-one**
+  (`overview.css`): the content block (`.acard-head`/`.acard-tools`/
+  `.ofilter`/`.ofilter-btn`/`.arow` grid
+  `minmax(0,300fr) 124fr 232fr 136fr 190fr`/`.arow.head`/`.athumb 68px`/
+  `.atxt`/`.a-date span`/`.cpill.sched`/`.edit-btn`/`.ar-slug > span`, with
+  the prototype's 1100/760/420 breakpoints) and the editor + SEO block
+  (`.seo-dom`/`.seo-switch`, `.ae-*`, `.ar-og*`/`.seo-lr`, `.seo-stage`/
+  `.seo-q`/`.seo-res`/`.seo-rt`/`.seo-rd`/`.seo-fields`, `.sx-*`, `.ab-*`,
+  and the `.modal-abody` overrides) now carry the prototype's exact
+  declarations in the prototype's order. Stale content-specific rules that
+  had leaked into the generic `@media (max-width:760px)` block
+  (`.arow`/`.arow.head`/`.a-author`/`.a-date`/`.acard-tools .sv-search`/
+  `.acard-tools .sv-add`) were removed, leaving only
+  `.modal-abody, .modal-pxadd { width: calc(100vw - 24px) }`.
+- **Danger Zone rewritten one-for-one** (`overview.css`,
+  `overview-screens.tsx`, `overview.tsx`): the `.sdz*` block now matches
+  the prototype (`[data-route="/overview"] .ov .sdz-h` 22px, `.sdz-sub`,
+  `.sdz-list { margin: 22px -14px -26px }`, `.sdz-row` grid
+  `44px minmax(0,1fr) auto` min-height 102px, `.sdz-row.tint`, `.sdz-ic`,
+  `.sdz-btn { width: 168px }` with `.ghost`/`.solid`/`.calm`, `.sdz-state`/
+  `.live`, `.sd-name`, and the mobile rule). `DangerPanel` is
+  `h2.sdz-h` + `p.sdz-sub` + a `.sdz-list` of three `.sdz-row`s, and
+  `SiteDangerDialog` uses `.modal.modal-danger`, `.dh`/`.dh-ic`,
+  `.dlist`, `.role-note`, `.tlist`/`.tempty`, `.confirm-label`/`#sd-confirm`
+  and `.alert-error`. `overview.tsx` replaced `unpublishedBySite` with
+  `publishOverrideBySite` and passes `status` + `onRepublish`/`onUnpublish`.
+- **DOM ids restored to the prototype** (`overview-screens.tsx`): the
+  Content dialog/editor/SEO controls (`ab-done`, `ar-submit`,
+  `ar-seo-reset`, `ar-seo-save`, `ar-seo-open`, `ab-open-l`, `ae-link-ok`,
+  `ae-link-x`, `ae-img`, `ar-count`, `ae-err`, `ar-img-bar`, `ar-img-err`,
+  `ar-file`, `ar-img-replace`, `ar-img-remove`, `art-foot`) and the SEO
+  sub-dialog fields (`agp-q/fav/sn/url/t/d/off`, `aseo-c-title`,
+  `aseo-bar-title`, `aseo-c-meta`, `aseo-bar-meta`, `ar-sxv-slug`,
+  `aseo-dom`, `ar-sxv-og`, `ar-og-use/own/pick/clear/file/img/dom/t/d`,
+  `ar-sxv-index`, `ar-seo-index`), plus the dialog ids `dlg-abody`,
+  `dlg-aseo`, `dlg-site-danger` and the danger-dialog ids `sd-ic`,
+  `sd-word`, `sd-confirm-label`, `sd-error`, `sd-submit`. The broken
+  Replace-image button (`#ar-file-btn` → `#ar-file`) was fixed. The
+  transfer list now renders the prototype's `.wmark` avatar. `MoreMenu`
+  gained a `wrapClassName` prop (default `"menu-anchor"`) so the Content
+  filter wraps its trigger in `.ofilter` exactly as the prototype does.
+
+Verification: `pnpm --filter @digital-romanian/web typecheck` clean and
+production build clean. Re-run with Playwright against the same local
+fixture: the temporary spec signed in, exercised the Content list + add
+article + body editor + SEO dialog, then the Danger Zone (republish →
+live, unpublish dialog with hidden confirm and enabled submit → offline,
+transfer empty-state branch, delete dialog gated on the typed site name).
+All assertions passed with zero console/page errors; the temp spec and
+config were deleted afterwards.
+
+### Content dialog image, danger-zone icon, switcher Back-to-workspace - 16 October 2026
+
+Three small wp.html-parity fixes reported by the owner. Presentation only;
+no schema change, no hosted writes.
+
+- **Article edit dialog showed an empty cover** (`overview-screens.tsx`):
+  `ArticleDialog`'s initial `img` state only fell back to `photo`, while
+  the Content row renders `a.img || photoUrl(a.photo || ART_COVER)` — so
+  editing a seeded article (img unset, photo set) showed the empty
+  `.ar-thumb` drop box instead of the article's image. The init now
+  mirrors the row (same pattern as `ProductDialog`):
+  `edit ? edit.img || photoUrl(edit.photo || ART_COVER).replace("w=120&h=120", "w=280&h=280") : null`.
+- **Danger-zone unpublish icon** (`overview-screens.tsx`): `SDZ_IC.ban`
+  was the prototype's `up` glyph (20×20 `<use href="#i-publishing">`);
+  it is now the exact circle-slash svg `wp.html` uses for the live /
+  "Unpublish Site" row and the confirm dialog (24×24 path,
+  `fill="currentColor"`). `up` (offline / "Republish Site") stays
+  `i-publishing`, matching wp.html's `dangerPanel(s, d)` one-for-one.
+- **Overview site switcher: Back to workspace row** (`overview.tsx`,
+  `overview.css`): `SiteSwitcher` gained a `workspace?: WorkspaceRow`
+  prop and now renders wp.html's `#sw-back` row as the first child of
+  `.switcher-scroll` — `Link` to `/workspace`, the arrow glyph,
+  `strong` "Back to workspace", the `#sw-back-ws` subtitle
+  (`"{name} · all sites, team & settings"`, fallback
+  "All your workspaces") and the `#sw-back-mark` Wmark avatar. `.sw-back*`
+  CSS copied verbatim from wp.html (including its 760px rule). The call
+  site passes `activeWorkspace`.
+
+Verification: `pnpm --filter @digital-romanian/web typecheck` clean and
+production build clean. A temporary Playwright spec against the local
+`e2e/support/feature-server.mjs` fixture (no hosted services) passed 3/3:
+the edit dialog's `#ar-thumb` renders the seeded article's image
+(resolved `w=280&h=280`), `#sw-back` is visible with the workspace
+subtitle and navigates to `/workspace`, and the danger-zone icon is the
+i-publishing arrow while offline and the circle-slash after publishing.
+Environmental note: Playwright's `webServer` spawn of the fixture timed
+out twice this session with the plain `node e2e/support/feature-server.mjs`
+command and booted when wrapped as
+`cmd /d /s /c "node e2e/support/feature-server.mjs > log 2>&1"` — if that
+happens again, check for orphaned listeners on 5188/5189 first before
+concluding the fixture is broken. Temp spec/config/logs removed after the
+run, so no new committed e2e coverage exists (consistent with the rest of
+the overview screens).
